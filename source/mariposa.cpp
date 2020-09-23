@@ -50,7 +50,7 @@ internal void Win32ResizeDIBSection(int width, int height)    // Device independ
 {
     if(BitMapMemory)
     {
-        VirtualFree(&BitMapMemory, 0, MEM_RELEASE);
+        VirtualFree(BitMapMemory, 0, MEM_RELEASE);
     }
     
     BitmapWidth = width;
