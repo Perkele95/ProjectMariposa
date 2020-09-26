@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <Xinput.h>
+#include <dsound.h>
 
 #define internal static
 #define local_persist static
@@ -15,6 +16,8 @@ typedef short int16;
 typedef int int32;
 typedef long long int64;
 
+typedef int32 bool32;
+
 struct win32OffscreenBuffer
 {
     BITMAPINFO Info;
@@ -28,6 +31,10 @@ struct Win32WindowDimensions
     int width, height;
 };
 
+// TODO: UNglobal these:
+global_variable bool GlobalRunning;
+global_variable win32OffscreenBuffer GlobalBackbuffer;
+
 // ------------------------------------------------------------
 // This is support for XInputGetState and XInputSetState
 #define X_INPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE* pState)
@@ -35,8 +42,8 @@ struct Win32WindowDimensions
 typedef X_INPUT_GET_STATE(x_Input_Get_State);
 typedef X_INPUT_SET_STATE(x_Input_Set_State);
 // Stub functions are safe guard against access violations
-X_INPUT_GET_STATE(XInputGetStateStub){ return 0; }
-X_INPUT_SET_STATE(XInputSetStateStub){ return 0; }
+X_INPUT_GET_STATE(XInputGetStateStub){ return ERROR_DEVICE_NOT_CONNECTED; }
+X_INPUT_SET_STATE(XInputSetStateStub){ return ERROR_DEVICE_NOT_CONNECTED; }
 
 global_variable x_Input_Get_State* _XInputGetState = XInputGetStateStub;
 global_variable x_Input_Set_State* _XInputSetState = XInputSetStateStub;
@@ -46,17 +53,91 @@ global_variable x_Input_Set_State* _XInputSetState = XInputSetStateStub;
 internal void Win32LoadXInput(void)
 {
     HMODULE xInputLibrary = LoadLibraryA("xinput1_4.dll");
+    if(!xInputLibrary)
+    {
+        // TODO: Log info library version
+        HMODULE xInputLibrary = LoadLibraryA("xinput1_3.dll");
+    }
+        
     if(xInputLibrary)
     {
         XInputGetState = (x_Input_Get_State*)GetProcAddress(xInputLibrary, "XInputGetState");
         XInputSetState = (x_Input_Set_State*)GetProcAddress(xInputLibrary, "XInputGetState");
     }
+    else
+    {
+        // TODO: Log Error
+    }
 }
 // ------------------------------------------------------------
 
-// TODO: UNglobal these:
-global_variable bool GlobalRunning;
-global_variable win32OffscreenBuffer GlobalBackbuffer;
+// ------------------------------------------------------------
+// This is support for DirectSoundCreate
+#define DIRECT_SOUND_CREATE(name) HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND* ppDS, LPUNKNOWN pUnkOuter)
+typedef DIRECT_SOUND_CREATE(direct_sound_create);
+
+internal void Win32InitDirectSound(HWND window, int32 samplesPerSecond, int32 bufferSize)
+{
+    HMODULE dSoundlibrary = LoadLibraryA("dsound.dll");
+    if(dSoundlibrary)
+    {
+        direct_sound_create* DirectSoundCreate = (direct_sound_create*)GetProcAddress(dSoundlibrary, "DirectSoundCreate");
+        
+        WAVEFORMATEX waveFormat = {};
+        waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+        waveFormat.nChannels = 2;
+        waveFormat.nSamplesPerSec = samplesPerSecond;
+        waveFormat.wBitsPerSample = 16;
+        waveFormat.nBlockAlign = (waveFormat.nChannels * waveFormat.wBitsPerSample) / 8;
+        waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
+        waveFormat.cbSize = 0;
+            
+        IDirectSound* directSound;
+        if(DirectSoundCreate && SUCCEEDED(DirectSoundCreate(0, &directSound, 0)))
+        {
+            if(SUCCEEDED(directSound->SetCooperativeLevel(window, DSSCL_PRIORITY)))
+            {
+                DSBUFFERDESC bufferDesc = {};
+                bufferDesc.dwSize = sizeof(bufferDesc);
+                bufferDesc.dwFlags = DSBCAPS_PRIMARYBUFFER;
+                
+                IDirectSoundBuffer* primaryBuffer;
+                if(SUCCEEDED(directSound->CreateSoundBuffer(&bufferDesc, &primaryBuffer, 0)))
+                {
+                    if(SUCCEEDED(primaryBuffer->SetFormat(&waveFormat)))
+                    {
+                        OutputDebugStringA("Primary DirectSound buffer created successfully!\n");
+                    }
+                    else
+                    {
+                        // TODO: Log error
+                    }
+                }
+            }
+            else
+            {
+                // TODO: Log error
+            }
+        }
+        else
+        {
+            // TODO: Log error
+        }
+        
+        DSBUFFERDESC bufferDesc = {};
+        bufferDesc.dwSize = sizeof(bufferDesc);
+        bufferDesc.dwFlags = 0;
+        bufferDesc.dwBufferBytes = bufferSize;
+        bufferDesc.lpwfxFormat = &waveFormat;
+        
+        IDirectSoundBuffer* secondaryBuffer;
+        if(SUCCEEDED(directSound->CreateSoundBuffer(&bufferDesc, &secondaryBuffer, 0)))
+        {
+            OutputDebugStringA("Secondary DirectSound buffer created successfully!\n");
+        }
+    }
+}
+// ------------------------------------------------------------
 
 internal Win32WindowDimensions Win32GetWindowDimensions(HWND window)
 {
@@ -216,8 +297,13 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
                 }
                 else
                 {
-                    // do default
+                    // do
                 }
+            }
+            bool32 altKeyDown = (lParam & (1 << 29));
+            if(VKCode == VK_F4 && altKeyDown)
+            {
+                GlobalRunning = false;
             }
         } break;
 
@@ -270,6 +356,9 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
         {
             GlobalRunning = true;
             int xOffset = 0, yOffset = 0;
+            
+            Win32InitDirectSound(window, 48000, 48000 * sizeof(int16) * 2);
+            
             while(GlobalRunning)
             {
                 MSG message;
@@ -318,8 +407,8 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
                 Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
                 Win32CopyBufferToWindow(deviceContext, &GlobalBackbuffer, dimensions.width, dimensions.height);
                 
-                xOffset += 2;
-                yOffset++;
+                xOffset += 1;
+                yOffset += 1;
             }
         }
         else
