@@ -383,6 +383,14 @@ void Win32FillSoundBuffer(Win32SoundOutput* soundOutput, DWORD byteToLock, DWORD
 
 INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
+    
+    int64 perfCountFrequency;
+    {
+        LARGE_INTEGER perfCountFrequencyResult; 
+        QueryPerformanceFrequency(&perfCountFrequencyResult);
+        perfCountFrequency = perfCountFrequencyResult.QuadPart;
+    }
+    
     Win32LoadXInput();
     
     WNDCLASSA windowClass = {};
@@ -427,6 +435,11 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
             GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
             
             GlobalRunning = true;
+            
+            LARGE_INTEGER lastCounter;
+            QueryPerformanceCounter(&lastCounter);
+            uint64 lastCycleCount = __rdtsc();
+            
             while(GlobalRunning)
             {
                 MSG message;
@@ -498,6 +511,24 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
                 
                 Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
                 Win32CopyBufferToWindow(deviceContext, &GlobalBackbuffer, dimensions.width, dimensions.height);
+                
+                uint64 endCycleCount = __rdtsc();
+                
+                LARGE_INTEGER endCounter;
+                QueryPerformanceCounter(&endCounter);
+                
+                uint64 cyclesElapsed = endCycleCount - lastCycleCount;
+                int64 counterElapsed = endCounter.QuadPart - lastCounter.QuadPart;
+                int32 msDeltaTime = (int32)((1000 * counterElapsed) / perfCountFrequency);
+                int32 fps = (int32)(perfCountFrequency / counterElapsed);
+                uint32 MCPF = (uint32)cyclesElapsed / 1000000;
+                
+                char buffer[256];
+                wsprintfA(buffer, "ms/frame: %d, FPS: %d, MCPF: %d\n", msDeltaTime, fps, MCPF);
+                OutputDebugStringA(buffer);
+                
+                lastCounter = endCounter;
+                lastCycleCount = endCycleCount;
             }
         }
         else
