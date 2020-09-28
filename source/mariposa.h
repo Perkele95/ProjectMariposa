@@ -8,6 +8,13 @@
     NOTE: Services that the game provides to the platform layer
 */
 
+struct MP_SOUNDOUTPUTBUFFER
+{
+    int SamplesPerSecond;
+    int SampleCount;
+    int16* Samples;
+};
+
 struct MP_OFFSCREENBUFFER
 {
     void* Memory;
@@ -15,4 +22,4 @@ struct MP_OFFSCREENBUFFER
 };
 
 // Requires: timestep, input, bitmap buffer and sound buffer
-internal void GameUpdateAndRender(MP_OFFSCREENBUFFER* buffer);
+internal void GameUpdateAndRender(MP_SOUNDOUTPUTBUFFER* soundBuffer, MP_OFFSCREENBUFFER* buffer, int blueOffset, int greenOffset, int16 toneFrequency);
