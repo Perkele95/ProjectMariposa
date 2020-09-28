@@ -16,26 +16,14 @@ typedef long long int64;
 
 typedef int32 bool32;
 
+#include "mariposa.cpp"
+
 #include <windows.h>
 #include <Xinput.h>
 #include <dsound.h>
-#include <math.h>
 #include <malloc.h>
 
-#include "mariposa.cpp"
-
-struct win32OffscreenBuffer
-{
-    BITMAPINFO Info;
-    void* Memory;
-    int Width, Height;
-    int Pitch;
-};
-
-struct Win32WindowDimensions
-{
-    int width, height;
-};
+#include "win32_mariposa.h"
 
 // TODO: UNglobal these:
 global_variable bool32 GlobalRunning;
@@ -315,19 +303,6 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
     return result;
 }
 
-struct Win32SoundOutput{
-    int SamplesPerSecond;
-    int BytesPerSample;
-    int ToneFrequency;
-    uint32 RunningSampleIndex;
-    int WavePeriod;
-    int HalfWavePeriod;
-    int SecondaryBufferSize;
-    int16 ToneVolume;
-    float tSine;
-    int LatencySampleCount;
-};
-
 void Win32ClearSoundbuffer(Win32SoundOutput* soundOutput)
 {
     void* region1;
@@ -387,6 +362,13 @@ void Win32FillSoundBuffer(Win32SoundOutput* soundOutput, DWORD byteToLock, DWORD
     }
 }
 
+internal void Win32ProcessXInputDigitalButton(DWORD XInputButtonState, DWORD buttonBit, MP_BUTTON_STATE* oldState, MP_BUTTON_STATE* newState)
+{
+    newState->EndedDown = (XInputButtonState & buttonBit) == buttonBit;
+    // TODO: Check if ? 1 : 0 is needed
+    newState->HalfTransitionCount = (oldState->EndedDown != newState->EndedDown) ? 1 : 0;
+}
+
 INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
     
@@ -421,17 +403,9 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
         {
             HDC deviceContext = GetDC(window);
             
-            // Note: Graphics test
-            int xOffset = 0, yOffset = 0;
-            
-            // Note: Soundtest
-            
             Win32SoundOutput soundOutput = {};
             
             soundOutput.SamplesPerSecond = 48000;
-            soundOutput.ToneFrequency = 256;
-            soundOutput.ToneVolume = 3000;
-            soundOutput.WavePeriod = soundOutput.SamplesPerSecond / soundOutput.ToneFrequency;
             soundOutput.BytesPerSample = 2 * sizeof(int16);
             soundOutput.SecondaryBufferSize = soundOutput.SamplesPerSecond * soundOutput.BytesPerSample;
             soundOutput.LatencySampleCount = soundOutput.SamplesPerSecond / 15;        
@@ -444,6 +418,10 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
             
             int16* samples = (int16*)VirtualAlloc(0, soundOutput.SecondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             
+            MP_INPUT input[2] = {};
+            MP_INPUT* newInput = &input[0];
+            MP_INPUT* oldInput = &input[1];
+                
             LARGE_INTEGER lastCounter;
             QueryPerformanceCounter(&lastCounter);
             uint64 lastCycleCount = __rdtsc();
@@ -451,6 +429,7 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
             while(GlobalRunning)
             {
                 MSG message;
+                
                 while(PeekMessage(&message, window, 0, 0, PM_REMOVE))
                 {
                     if(message.message == WM_QUIT)
@@ -460,30 +439,64 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
                     DispatchMessage(&message);
                 }
                 
-                for(int controllerIndex = 0; controllerIndex < XUSER_MAX_COUNT; controllerIndex++)
+                int maxControllerCount = XUSER_MAX_COUNT;
+                if(maxControllerCount > ArrayCount(newInput->Controllers))
                 {
+                    maxControllerCount = ArrayCount(newInput->Controllers);
+                }
+                
+                for(int controllerIndex = 0; controllerIndex < maxControllerCount; controllerIndex++)
+                {
+                    MP_CONTROLLER_INPUT* oldController = &oldInput->Controllers[controllerIndex];
+                    MP_CONTROLLER_INPUT* newController = &newInput->Controllers[controllerIndex];
+                    
                     XINPUT_STATE controllerState;
                     if(XInputGetState(controllerIndex, &controllerState) == ERROR_SUCCESS)
                     {
                         // Controller plugged in
                         XINPUT_GAMEPAD* gamePad = &controllerState.Gamepad;
+                        
+                        // TODO: dPad
                         bool32 dpadUp = gamePad->wButtons & XINPUT_GAMEPAD_DPAD_UP;
                         bool32 dpadDown = gamePad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN;
                         bool32 dpadLeft = gamePad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT;
                         bool32 dpadRight = gamePad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT;
-                        bool32 padStart = gamePad->wButtons & XINPUT_GAMEPAD_START;
-                        bool32 padBack = gamePad->wButtons & XINPUT_GAMEPAD_BACK;
-                        bool32 leftThumb = gamePad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB;
-                        bool32 rightThumb = gamePad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB;
-                        bool32 leftShoulder = gamePad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER;
-                        bool32 rightShoulder = gamePad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER;
-                        bool32 aButton = gamePad->wButtons & XINPUT_GAMEPAD_A;
-                        bool32 bButton = gamePad->wButtons & XINPUT_GAMEPAD_B;
-                        bool32 xButton = gamePad->wButtons & XINPUT_GAMEPAD_X;
-                        bool32 yButton = gamePad->wButtons & XINPUT_GAMEPAD_Y;
                         
-                        int16 stickX = gamePad->sThumbLX;
-                        int16 stickY = gamePad->sThumbLY;
+                        newController->StartX = oldController->EndX;
+                        newController->StartY = oldController->EndY;
+                        
+                        // TODO: Min/Max macro
+                        float x, y;
+                        if(gamePad->sThumbLX < 0)
+                            x = (float)gamePad->sThumbLX / 32768;
+                        else
+                            x = (float)gamePad->sThumbLX / 32767;
+                            
+                        if(gamePad->sThumbLY < 0)
+                            y = (float)gamePad->sThumbLY / 32768;
+                        else
+                            y = (float)gamePad->sThumbLY / 32767;
+                            
+                        newController->MinX = newController->MaxX = newController->EndX = x;
+                        newController->MinY = newController->MaxY = newController->EndY = y;
+                        
+                        Win32ProcessXInputDigitalButton(gamePad->wButtons, XINPUT_GAMEPAD_A,
+                                                        &oldController->Down, &newController->Down);
+                        Win32ProcessXInputDigitalButton(gamePad->wButtons, XINPUT_GAMEPAD_B,
+                                                        &oldController->Right, &newController->Right);
+                        Win32ProcessXInputDigitalButton(gamePad->wButtons, XINPUT_GAMEPAD_X,
+                                                        &oldController->Left, &newController->Left);
+                        Win32ProcessXInputDigitalButton(gamePad->wButtons, XINPUT_GAMEPAD_Y,
+                                                        &oldController->Up, &newController->Up);
+                        Win32ProcessXInputDigitalButton(gamePad->wButtons, XINPUT_GAMEPAD_LEFT_SHOULDER,
+                                                        &oldController->LeftShoulder, &newController->LeftShoulder);
+                        Win32ProcessXInputDigitalButton(gamePad->wButtons, XINPUT_GAMEPAD_RIGHT_SHOULDER,
+                                                        &oldController->RightShoulder, &newController->RightShoulder);
+                        
+                        //bool32 padStart = gamePad->wButtons & XINPUT_GAMEPAD_START;
+                        //bool32 padBack = gamePad->wButtons & XINPUT_GAMEPAD_BACK;
+                        //bool32 leftThumb = gamePad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB;
+                        //bool32 rightThumb = gamePad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB;
                     }
                     else
                     {
@@ -502,7 +515,7 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
                 if(SUCCEEDED(GlobalSecondaryBuffer->GetCurrentPosition(&playCursor, &writeCursor)))
                 {
                     byteToLock = ((soundOutput.RunningSampleIndex * soundOutput.BytesPerSample) % soundOutput.SecondaryBufferSize);
-                    targetCursor = (playCursor + (soundOutput.LatencySampleCount * soundOutput.BytesPerSample)) % soundOutput.SecondaryBufferSize;
+                    targetCursor = (playCursor + soundOutput.LatencySampleCount * soundOutput.BytesPerSample) % soundOutput.SecondaryBufferSize;
                     bytesToWrite;
                     if(byteToLock > targetCursor)
                     {
@@ -527,15 +540,12 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
                 buffer.Width = GlobalBackbuffer.Width;
                 buffer.Height = GlobalBackbuffer.Height;
                 buffer.Pitch = GlobalBackbuffer.Pitch;
-                GameUpdateAndRender(&soundBuffer, &buffer, xOffset, yOffset, soundOutput.ToneFrequency);
+                GameUpdateAndRender(newInput, &soundBuffer, &buffer);
                 
                 if(isSoundValid)
                 {                    
                     Win32FillSoundBuffer(&soundOutput, byteToLock, bytesToWrite, &soundBuffer);
                 }
-                
-                xOffset += 1;
-                yOffset += 1;
                 
                 Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
                 Win32CopyBufferToWindow(deviceContext, &GlobalBackbuffer, dimensions.width, dimensions.height);
@@ -557,6 +567,11 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
                 #endif
                 lastCounter = endCounter;
                 lastCycleCount = endCycleCount;
+                
+                // TODO: Swap function
+                MP_INPUT* temp = newInput;
+                newInput = oldInput;
+                oldInput = temp;
             }
         }
         else

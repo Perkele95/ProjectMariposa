@@ -1,5 +1,8 @@
 #include "mariposa.h"
 
+#include <Windows.h>
+#include <math.h>
+
 internal void OutputSound(MP_SOUNDOUTPUTBUFFER* soundBuffer, int16 toneFrequency)
 {
     local_persist float tSine;
@@ -37,9 +40,29 @@ internal void RenderGradient(MP_OFFSCREENBUFFER* buffer, int xOffset, int yOffse
     }
 }
 
-internal void GameUpdateAndRender(MP_SOUNDOUTPUTBUFFER* soundBuffer, MP_OFFSCREENBUFFER* buffer, int blueOffset, int greenOffset, int16 toneFrequency)
+internal void GameUpdateAndRender(MP_INPUT* input, MP_SOUNDOUTPUTBUFFER* soundBuffer, MP_OFFSCREENBUFFER* buffer)
 {
-    // TODO: allow sample offsets here for more robust platform options
+    local_persist int blueOffset = 0;
+    local_persist int greenOffset = 0;
+    local_persist int16 toneFrequency = 256;
+    
+    MP_CONTROLLER_INPUT* input0 = &input->Controllers[0];
+    if(input0->IsAnalog)
+    {
+        // I have no controller so I cannot verify this
+        blueOffset += (int)(4.8f * input0->EndX);
+        toneFrequency = 256 + (int)(128.0f * input0->EndY);
+    }
+    else
+    {
+        // Digital movement tuning
+    }
+    
+    if(input0->Down.EndedDown)
+    {
+        greenOffset += 1;
+    }
+    
     OutputSound(soundBuffer, toneFrequency);
     RenderGradient(buffer, blueOffset, greenOffset);
 }
