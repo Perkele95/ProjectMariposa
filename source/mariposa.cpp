@@ -40,18 +40,27 @@ internal void RenderGradient(MP_OFFSCREENBUFFER* buffer, int xOffset, int yOffse
     }
 }
 
-internal void GameUpdateAndRender(MP_INPUT* input, MP_SOUNDOUTPUTBUFFER* soundBuffer, MP_OFFSCREENBUFFER* buffer)
+internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_SOUNDOUTPUTBUFFER* soundBuffer, MP_OFFSCREENBUFFER* buffer)
 {
-    local_persist int blueOffset = 0;
-    local_persist int greenOffset = 0;
-    local_persist int16 toneFrequency = 256;
+    MP_GAMESTATE* gameState = (MP_GAMESTATE*)gameMemory->PermanentStorage;
+    
+    MP_ASSERT(sizeof(gameState) <= gameMemory->PermanentStorageSize)
+    
+    if(!gameMemory->IsInitialised)
+    {
+        gameState->toneFrequency = 256;
+        
+        // TODO: Perhaps put this into platform layer
+        gameMemory->IsInitialised = true;
+    }
     
     MP_CONTROLLER_INPUT* input0 = &input->Controllers[0];
+    input0->IsAnalog = false;
     if(input0->IsAnalog)
     {
         // I have no controller so I cannot verify this
-        blueOffset += (int)(4.8f * input0->EndX);
-        toneFrequency = 256 + (int)(128.0f * input0->EndY);
+        gameState->blueOffset += (int)(4.8f * input0->EndX);
+        gameState->toneFrequency = 256 + (int)(128.0f * input0->EndY);
     }
     else
     {
@@ -60,9 +69,9 @@ internal void GameUpdateAndRender(MP_INPUT* input, MP_SOUNDOUTPUTBUFFER* soundBu
     
     if(input0->Down.EndedDown)
     {
-        greenOffset += 1;
+        gameState->greenOffset += 1;
     }
     
-    OutputSound(soundBuffer, toneFrequency);
-    RenderGradient(buffer, blueOffset, greenOffset);
+    OutputSound(soundBuffer, gameState->toneFrequency);
+    RenderGradient(buffer, gameState->blueOffset, gameState->greenOffset);
 }
