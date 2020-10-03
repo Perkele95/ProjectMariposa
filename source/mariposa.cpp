@@ -29,8 +29,8 @@ internal void RenderGradient(MP_OFFSCREENBUFFER* buffer, int xOffset, int yOffse
         for(int x= 0; x < buffer->Width; x++)
         {
             // pixel in memory: BB GG RR CC
-            uint8 blue = x + xOffset;
-            uint8 green = y + yOffset;
+            uint8 blue = (uint8)(x + xOffset);
+            uint8 green = (uint8)(y + yOffset);
             
             *pixel++ = blue | (green << 8);
         }
@@ -68,7 +68,7 @@ internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_SOU
     {
         // I have no controller so I cannot verify this
         gameState->blueOffset += (int)(4.8f * input0->EndX);
-        gameState->toneFrequency = 256 + (int)(128.0f * input0->EndY);
+        gameState->toneFrequency = 256 + (int16)(128.0f * input0->EndY);
     }
     else
     {

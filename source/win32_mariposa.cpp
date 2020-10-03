@@ -2,7 +2,7 @@
 #define local_persist static
 #define global_variable static
 
-#define PI32 3.14159265359
+#define PI32 3.14159265359f
 
 typedef unsigned char uint8;
 typedef unsigned short uint16;
@@ -56,7 +56,7 @@ internal debug_read_file_result DEBUG_PlatformReadEntireFile(char* fileName)
         if(GetFileSizeEx(fileHandle, &fileSize))
         {
             uint32 fileSize32 = SafeTruncateUint32(fileSize.QuadPart);
-            result.data = VirtualAlloc(0, fileSize.QuadPart, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            result.data = VirtualAlloc(0, (size_t)fileSize.QuadPart, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             if(result.data)
             {
                 DWORD bytesRead;
@@ -127,7 +127,7 @@ internal void Win32LoadXInput(void)
     if(!xInputLibrary)
     {
         // TODO: Log info library version
-        HMODULE xInputLibrary = LoadLibraryA("xinput1_3.dll");
+        xInputLibrary = LoadLibraryA("xinput1_3.dll");
     }
         
     if(xInputLibrary)
@@ -163,7 +163,7 @@ internal void Win32InitDirectSound(HWND window, int32 samplesPerSecond, int32 bu
         waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
         waveFormat.cbSize = 0;
             
-        IDirectSound* directSound;
+        IDirectSound* directSound = {};
         if(DirectSoundCreate && SUCCEEDED(DirectSoundCreate(0, &directSound, 0)))
         {
             if(SUCCEEDED(directSound->SetCooperativeLevel(window, DSSCL_PRIORITY)))
@@ -285,77 +285,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
         case WM_KEYDOWN:
         case WM_KEYUP:
         {
-            uint32 VKCode = wParam;
-            bool32 wasDown = (lParam & (1 << 30) != 0);
-            bool32 isDown = (lParam & (1 << 31) == 0);
-            if(wasDown != isDown)
-            {
-                if(VKCode == 'W')
-                {
-                    // do
-                }
-                else if(VKCode == 'A')
-                {
-                    // do
-                }
-                else if(VKCode == 'S')
-                {
-                    // do
-                }
-                else if(VKCode == 'D')
-                {
-                    // do
-                }
-                else if(VKCode == 'Q')
-                {
-                    // do
-                }
-                else if(VKCode == 'E')
-                {
-                    // do
-                }
-                else if(VKCode == VK_UP)
-                {
-                    // do
-                }
-                else if(VKCode == VK_DOWN)
-                {
-                    // do
-                }
-                else if(VKCode == VK_LEFT)
-                {
-                    // do
-                }
-                else if(VKCode == VK_RIGHT)
-                {
-                    // do
-                }
-                else if(VKCode == VK_SPACE)
-                {
-                    // do
-                }
-                else if(VKCode == VK_ESCAPE)
-                {
-                    // do
-                }
-                else if(VKCode == VK_CONTROL)
-                {
-                    // do
-                }
-                else if(VKCode == VK_SHIFT)
-                {
-                    // do
-                }
-                else
-                {
-                    // do
-                }
-            }
-            bool32 altKeyDown = (lParam & (1 << 29));
-            if(VKCode == VK_F4 && altKeyDown)
-            {
-                GlobalRunning = false;
-            }
+            MP_ASSERT(!"Keyboard input came in through a non-dispatch message!");
         } break;
 
         case WM_PAINT:
@@ -438,6 +368,112 @@ void Win32FillSoundBuffer(Win32SoundOutput* soundOutput, DWORD byteToLock, DWORD
     }
 }
 
+internal void Win32ProcessKeyboardEvent(MP_BUTTON_STATE* state, bool32 isDown)
+{
+    state->EndedDown = isDown;
+    state->HalfTransitionCount++;
+}
+
+internal void Win32ProcessPendingMessages(MP_CONTROLLER_INPUT* keyboardController)
+{
+    MSG message;
+    
+    while(PeekMessage(&message, 0, 0, 0, PM_REMOVE))
+    {
+        switch(message.message)
+        {
+            case WM_QUIT:
+            {
+                GlobalRunning = false;
+            }
+            
+            case WM_SYSKEYDOWN:
+            case WM_SYSKEYUP:
+            case WM_KEYDOWN:
+            case WM_KEYUP:
+            {
+                uint32 VKCode = (uint32)message.wParam;
+                bool32 wasDown = ((message.lParam & (1 << 30)) != 0);
+                bool32 isDown = ((message.lParam & (1 << 31)) == 0);
+                if(wasDown != isDown)
+                {
+                    if(VKCode == 'W')
+                    {
+                        // do
+                    }
+                    else if(VKCode == 'A')
+                    {
+                        // do
+                    }
+                    else if(VKCode == 'S')
+                    {
+                        // do
+                    }
+                    else if(VKCode == 'D')
+                    {
+                        // do
+                    }
+                    else if(VKCode == 'Q')
+                    {
+                        Win32ProcessKeyboardEvent(&keyboardController->LeftShoulder, isDown);
+                    }
+                    else if(VKCode == 'E')
+                    {
+                        Win32ProcessKeyboardEvent(&keyboardController->RightShoulder, isDown);
+                    }
+                    else if(VKCode == VK_UP)
+                    {
+                        Win32ProcessKeyboardEvent(&keyboardController->Up, isDown);
+                    }
+                    else if(VKCode == VK_DOWN)
+                    {
+                        Win32ProcessKeyboardEvent(&keyboardController->Down, isDown);
+                    }
+                    else if(VKCode == VK_LEFT)
+                    {
+                        Win32ProcessKeyboardEvent(&keyboardController->Left, isDown);
+                    }
+                    else if(VKCode == VK_RIGHT)
+                    {
+                        Win32ProcessKeyboardEvent(&keyboardController->Right, isDown);
+                    }
+                    else if(VKCode == VK_SPACE)
+                    {
+                        // do
+                    }
+                    else if(VKCode == VK_ESCAPE)
+                    {
+                        // do
+                    }
+                    else if(VKCode == VK_CONTROL)
+                    {
+                        // do
+                    }
+                    else if(VKCode == VK_SHIFT)
+                    {
+                        // do
+                    }
+                    else
+                    {
+                        // do
+                    }
+                }
+                bool32 altKeyDown = (message.lParam & (1 << 29));
+                if(VKCode == VK_F4 && altKeyDown)
+                {
+                    GlobalRunning = false;
+                }
+            } break;
+            
+            default:
+            {
+                TranslateMessage(&message);
+                DispatchMessage(&message);
+            } break;
+        }
+    }
+}
+
 internal void Win32ProcessXInputDigitalButton(DWORD XInputButtonState, DWORD buttonBit, MP_BUTTON_STATE* oldState, MP_BUTTON_STATE* newState)
 {
     newState->EndedDown = (XInputButtonState & buttonBit) == buttonBit;
@@ -445,9 +481,8 @@ internal void Win32ProcessXInputDigitalButton(DWORD XInputButtonState, DWORD but
     newState->HalfTransitionCount = (oldState->EndedDown != newState->EndedDown) ? 1 : 0;
 }
 
-INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
+INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
-    
     int64 perfCountFrequency;
     {
         LARGE_INTEGER perfCountFrequencyResult; 
@@ -502,10 +537,10 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
             
             MP_MEMORY gameMemory = {};
             gameMemory.PermanentStorageSize = MegaBytes(64);
-            gameMemory.TransientStorageSize = GigaBytes(4);
+            gameMemory.TransientStorageSize = GigaBytes(1);
             
             uint64 totalSize = gameMemory.PermanentStorageSize + gameMemory.TransientStorageSize;
-            gameMemory.PermanentStorage = VirtualAlloc(baseAddress, totalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            gameMemory.PermanentStorage = VirtualAlloc(baseAddress, (size_t)totalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             
             gameMemory.TransientStorage = ((uint8*)gameMemory.PermanentStorage + gameMemory.PermanentStorageSize);
             
@@ -520,25 +555,19 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
                 uint64 lastCycleCount = __rdtsc();
                 
                 while(GlobalRunning)
-                {
-                    MSG message;
+                {                    
+                    MP_CONTROLLER_INPUT* keyboardController = &newInput->Controllers[0];
+                    *keyboardController = {};
                     
-                    while(PeekMessage(&message, window, 0, 0, PM_REMOVE))
-                    {
-                        if(message.message == WM_QUIT)
-                            GlobalRunning = false;
-                        
-                        TranslateMessage(&message);
-                        DispatchMessage(&message);
-                    }
+                    Win32ProcessPendingMessages(keyboardController);
                     
-                    int maxControllerCount = XUSER_MAX_COUNT;
+                    DWORD maxControllerCount = XUSER_MAX_COUNT;
                     if(maxControllerCount > ArrayCount(newInput->Controllers))
                     {
                         maxControllerCount = ArrayCount(newInput->Controllers);
                     }
                     
-                    for(int controllerIndex = 0; controllerIndex < maxControllerCount; controllerIndex++)
+                    for(DWORD controllerIndex = 0; controllerIndex < maxControllerCount; controllerIndex++)
                     {
                         MP_CONTROLLER_INPUT* oldController = &oldInput->Controllers[controllerIndex];
                         MP_CONTROLLER_INPUT* newController = &newInput->Controllers[controllerIndex];

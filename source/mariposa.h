@@ -51,7 +51,7 @@ inline internal uint32 SafeTruncateUint32(uint64 value)
 struct MP_SOUNDOUTPUTBUFFER
 {
     int SamplesPerSecond;
-    int SampleCount;
+    uint32 SampleCount;
     int16* Samples;
 };
 
