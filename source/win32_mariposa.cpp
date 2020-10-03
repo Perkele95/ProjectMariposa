@@ -45,6 +45,82 @@ global_variable x_Input_Set_State* _XInputSetState = XInputSetStateStub;
 #define XInputGetState _XInputGetState
 #define XInputSetState _XInputSetState
 
+internal debug_read_file_result DEBUG_PlatformReadEntireFile(char* fileName)
+{
+    debug_read_file_result result = {};
+    
+    void* fileHandle = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    if(fileHandle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER fileSize;
+        if(GetFileSizeEx(fileHandle, &fileSize))
+        {
+            uint32 fileSize32 = SafeTruncateUint32(fileSize.QuadPart);
+            result.data = VirtualAlloc(0, fileSize.QuadPart, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            if(result.data)
+            {
+                DWORD bytesRead;
+                if(ReadFile(fileHandle, result.data, fileSize32, &bytesRead, 0) && fileSize32 == bytesRead)
+                {
+                    result.dataSize = fileSize32;
+                }
+                else
+                {
+                    DEBUG_PlatformFreeFileMemory(result.data);
+                    result.data = 0;
+                }
+            }
+            else
+            {
+                // TODO: Log Error
+            }
+        }
+        else
+        {
+            // TODO: Log Error
+        }
+        
+        CloseHandle(fileHandle);
+    }
+    else
+    {
+        // TODO: Log Error
+    }
+    
+    return result;
+}
+
+internal void DEBUG_PlatformFreeFileMemory(void* memory)
+{
+    VirtualFree(memory, 0, MEM_RELEASE);
+}
+
+internal bool32 DEBUG_PlatformWriteEntireFile(char* fileName, debug_read_file_result* readData)
+{
+    bool32 result = false;
+    void* fileHandle = CreateFileA(fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+    if(fileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD bytesWritten;
+        if(WriteFile(fileHandle, readData->data, readData->dataSize, &bytesWritten, 0))
+        {
+            result = (readData->dataSize == bytesWritten);
+        }
+        else
+        {
+            // TODO: Log Error
+        }
+        
+        CloseHandle(fileHandle);
+    }
+    else
+    {
+        // TODO: Log Error
+    }
+    
+    return result;
+}
+
 internal void Win32LoadXInput(void)
 {
     HMODULE xInputLibrary = LoadLibraryA("xinput1_4.dll");
@@ -419,14 +495,14 @@ INT WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT sh
             int16* samples = (int16*)VirtualAlloc(0, soundOutput.SecondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             
             #if MP_INTERNAL
-                LPVOID baseAddress = (LPVOID)TeraBytes((uint64)2);
+                LPVOID baseAddress = (LPVOID)TeraBytes(2);
             #else
                 LPVOID baseAddress = 0;
             #endif
             
             MP_MEMORY gameMemory = {};
             gameMemory.PermanentStorageSize = MegaBytes(64);
-            gameMemory.TransientStorageSize = GigaBytes((uint64)4);
+            gameMemory.TransientStorageSize = GigaBytes(4);
             
             uint64 totalSize = gameMemory.PermanentStorageSize + gameMemory.TransientStorageSize;
             gameMemory.PermanentStorage = VirtualAlloc(baseAddress, totalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);

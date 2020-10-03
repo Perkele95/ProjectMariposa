@@ -1,39 +1,52 @@
 #pragma once
 
+#include <Windows.h>
+
 /*
-    MP_PERFORMANCE:
-        0 - assertions/debug features enabled
-        1 - assertions/debug features disabled
-    
+    // BUILD OPTIONS:
     MP_INTERNAL:
         0 - release version
         1 - internal version
+    MP_PERFORMANCE:
+        0 - assertions/debug features enabled
+        1 - assertions/debug features disabled
 */
+#define MP_INTERNAL 1
+#define MP_PERFORMANCE 0
 
-#if MP_PERFORMANCE
-#define MP_ASSERT(Expression)
+#if MP_INTERNAL
+    // THIS IS NOT FOR RELEASE VERSION, IT DOESN'T PROTECT AGAINST LOST DATA
+    struct debug_read_file_result
+    {
+        void* data;
+        uint32 dataSize;
+    };
+
+    internal debug_read_file_result DEBUG_PlatformReadEntireFile(char* filename);
+    internal bool32 DEBUG_PlatformWriteEntireFile(char* fileName, debug_read_file_result* readData);
+    internal void DEBUG_PlatformFreeFileMemory(void* memory);
 #else
-#define MP_ASSERT(Expression) if(!(Expression)) {DebugBreak();}
 #endif
 
-#define KiloBytes(value) (value * 1024)
-#define MegaBytes(value) (value * 1024 * 1024)
-#define GigaBytes(value) (value * 1024 * 1024 * 1024)
-#define TeraBytes(value) (value * 1024 * 1024 * 1024 * 1024)
+#if MP_PERFORMANCE
+    #define MP_ASSERT(Expression)
+#else
+    #define MP_ASSERT(Expression) if(!(Expression)) {DebugBreak();}
+#endif
+
+#define KiloBytes(value) (value * 1024LL)
+#define MegaBytes(value) (value * 1024LL * 1024LL)
+#define GigaBytes(value) (value * 1024LL * 1024LL * 1024LL)
+#define TeraBytes(value) (value * 1024LL * 1024LL * 1024LL * 1024LL)
 
 #define ArrayCount(array) (sizeof(array) / sizeof((array)[0]))
 
-/*
-    NOTE: Services that the platform layer provides to the game
-*/
-
-/*
-    NOTE: Services that the game provides to the platform layer
-*/
-
-/*  Memory block allocated on the heap which stores all game states
-    This is freed at the end. DO NOT read/write this after it has been freed.
-*/
+inline internal uint32 SafeTruncateUint32(uint64 value)
+{
+    // TODO: defines for max values
+    MP_ASSERT(value < 0xffffffff);
+    return (uint32)value;
+}
 
 struct MP_SOUNDOUTPUTBUFFER
 {

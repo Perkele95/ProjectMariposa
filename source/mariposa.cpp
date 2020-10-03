@@ -1,6 +1,5 @@
 #include "mariposa.h"
 
-#include <Windows.h>
 #include <math.h>
 
 internal void OutputSound(MP_SOUNDOUTPUTBUFFER* soundBuffer, int16 toneFrequency)
@@ -48,6 +47,15 @@ internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_SOU
     
     if(!gameMemory->IsInitialised)
     {
+        char* fileName = __FILE__;
+        
+        debug_read_file_result file = DEBUG_PlatformReadEntireFile(fileName);
+        if(file.data)
+        {
+            DEBUG_PlatformWriteEntireFile("test.out", &file);
+            DEBUG_PlatformFreeFileMemory(file.data);
+        }
+        
         gameState->toneFrequency = 256;
         
         // TODO: Perhaps put this into platform layer
