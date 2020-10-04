@@ -69,42 +69,50 @@ struct MP_BUTTON_STATE
 
 struct MP_CONTROLLER_INPUT
 {
+    bool32 IsConntected;
     bool32 IsAnalog;
     
-    float StartX;
-    float StartY;
-    
-    float MinX;
-    float MinY;
-    
-    float MaxX;
-    float MaxY;
-    
-    float EndX;
-    float EndY;
+    float StickAverageX;
+    float StickAverageY;
     
     union
     {
-        MP_BUTTON_STATE Buttons[6];
-        
+        MP_BUTTON_STATE Buttons[13];
+        // Make sure the buttons array matches the count of buttonstate struct
         struct 
         {
-        MP_BUTTON_STATE Up;
-        MP_BUTTON_STATE Down;
-        MP_BUTTON_STATE Left;
-        MP_BUTTON_STATE Right;
-        MP_BUTTON_STATE LeftShoulder;
-        MP_BUTTON_STATE RightShoulder;
+            MP_BUTTON_STATE Up;
+            MP_BUTTON_STATE Down;
+            MP_BUTTON_STATE Left;
+            MP_BUTTON_STATE Right;
+            MP_BUTTON_STATE Jump;
+            MP_BUTTON_STATE Sprint;
+            MP_BUTTON_STATE Crouch;
+            MP_BUTTON_STATE Escape;
+            MP_BUTTON_STATE Q;
+            MP_BUTTON_STATE E;
+            MP_BUTTON_STATE F;
+            MP_BUTTON_STATE G;
+            MP_BUTTON_STATE C;
         };
     };
-    
 };
 
+// Controller[0] = Keyboard
 struct MP_INPUT
 {
     // float deltaTime;
-    MP_CONTROLLER_INPUT Controllers[4];
+    MP_CONTROLLER_INPUT Controllers[5];
 };
+
+// Bounds checking getter
+inline internal MP_CONTROLLER_INPUT* GetController(MP_INPUT* input, int controllerIndex)
+{
+    MP_ASSERT(controllerIndex >= 0);
+    MP_ASSERT(controllerIndex < ArrayCount(input->Controllers));
+    
+    return &input->Controllers[controllerIndex];
+}
 
 struct MP_GAMESTATE
 {

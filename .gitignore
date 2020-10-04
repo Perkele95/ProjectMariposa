@@ -1,4 +1,5 @@
 build
+data
 cmd.exe.lnk
 
 *.vscode

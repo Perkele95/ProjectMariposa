@@ -62,22 +62,35 @@ internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_SOU
         gameMemory->IsInitialised = true;
     }
     
-    MP_CONTROLLER_INPUT* input0 = &input->Controllers[0];
-    input0->IsAnalog = false;
-    if(input0->IsAnalog)
+    for(int index = 0; index < ArrayCount(input->Controllers); index++)
     {
-        // I have no controller so I cannot verify this
-        gameState->blueOffset += (int)(4.8f * input0->EndX);
-        gameState->toneFrequency = 256 + (int16)(128.0f * input0->EndY);
-    }
-    else
-    {
-        // Digital movement tuning
-    }
-    
-    if(input0->Down.EndedDown)
-    {
-        gameState->greenOffset += 1;
+        MP_CONTROLLER_INPUT* controller = GetController(input, index);
+        controller->IsAnalog = false;
+        if(controller->IsAnalog)
+        {
+            // I have no controller so I cannot verify this
+            gameState->blueOffset += (int)(4.8f * controller->StickAverageX);
+            gameState->toneFrequency = 256 + (int16)(128.0f * controller->StickAverageY);
+        }
+        else
+        {
+            if(controller->Down.EndedDown)
+            {
+                gameState->greenOffset += 1;
+            }
+            if(controller->Up.EndedDown)
+            {
+                gameState->greenOffset -= 1;
+            }
+            if(controller->Left.EndedDown)
+            {
+                gameState->blueOffset -= 1;
+            }
+            if(controller->Right.EndedDown)
+            {
+                gameState->blueOffset += 1;
+            }
+        }
     }
     
     OutputSound(soundBuffer, gameState->toneFrequency);
