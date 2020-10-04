@@ -21,6 +21,7 @@ typedef int32 bool32;
 #include <Xinput.h>
 #include <dsound.h>
 #include <malloc.h>
+#include <stdio.h>
 
 #include "win32_mariposa.h"
 
@@ -28,6 +29,7 @@ typedef int32 bool32;
 global_variable bool32 GlobalRunning;
 global_variable win32OffscreenBuffer GlobalBackbuffer;
 global_variable IDirectSoundBuffer* GlobalSecondaryBuffer;
+global_variable int64 GlobalPerfCountFrequency;
 
 // ------------------------------------------------------------
 // This is support for XInputGetState and XInputSetState
@@ -514,14 +516,27 @@ internal void Win32ProcessXInputDigitalButton(DWORD XInputButtonState, DWORD but
     newState->HalfTransitionCount = (oldState->EndedDown != newState->EndedDown) ? 1 : 0;
 }
 
+inline internal LARGE_INTEGER Win32GetClockValue(void)
+{
+    LARGE_INTEGER result;
+    QueryPerformanceCounter(&result);
+    return result;
+}
+
+inline internal float Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER end)
+{
+    float result = (float)(end.QuadPart - start.QuadPart) / (float)GlobalPerfCountFrequency;
+    return result;
+}
+
 INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
-    int64 perfCountFrequency;
-    {
-        LARGE_INTEGER perfCountFrequencyResult; 
-        QueryPerformanceFrequency(&perfCountFrequencyResult);
-        perfCountFrequency = perfCountFrequencyResult.QuadPart;
-    }
+    LARGE_INTEGER PerfCountFrequencyResult;
+    QueryPerformanceFrequency(&PerfCountFrequencyResult);
+    GlobalPerfCountFrequency = PerfCountFrequencyResult.QuadPart;
+    
+    uint32 desiredSchedulerMS = 1;
+    bool32 sleepIsGranular = (timeBeginPeriod(desiredSchedulerMS) == TIMERR_NOERROR);
     
     Win32LoadXInput();
     
@@ -534,6 +549,10 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
     windowClass.hInstance = instance;
     //WindowClass.hIcon;
     windowClass.lpszClassName = "MariposaWindowClass";
+    
+    // TODO: refresh rate needs to be queried instead of set to a fixed value
+    uint32 refreshRate = 300;
+    float expectedDeltaTime = 1.0f / (float)refreshRate;
     
     if(RegisterClassA(&windowClass))
     {
@@ -583,8 +602,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 MP_INPUT* newInput = &input[0];
                 MP_INPUT* oldInput = &input[1];
                     
-                LARGE_INTEGER lastCounter;
-                QueryPerformanceCounter(&lastCounter);
+                LARGE_INTEGER lastCounter = Win32GetClockValue();
+                
                 uint64 lastCycleCount = __rdtsc();
                 
                 while(GlobalRunning)
@@ -718,46 +737,69 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         Win32FillSoundBuffer(&soundOutput, byteToLock, bytesToWrite, &soundBuffer);
                     }
                     
+                    LARGE_INTEGER workCounter = Win32GetClockValue();
+                    float workSecondsElapsed = Win32GetSecondsElapsed(lastCounter, workCounter);
+                    
+                    float secondsElapsedForFrame = workSecondsElapsed;
+                    if(secondsElapsedForFrame < expectedDeltaTime)
+                    {
+                        while(secondsElapsedForFrame < expectedDeltaTime)
+                        {
+                            if(sleepIsGranular)
+                            {
+                                DWORD sleepMS = (DWORD)(1000.0f * (expectedDeltaTime - secondsElapsedForFrame));
+                                Sleep(sleepMS);
+                            }
+                            secondsElapsedForFrame = Win32GetSecondsElapsed(lastCounter, Win32GetClockValue());
+                        }
+                    }
+                    else
+                    {
+                        // Log: Missed frame!
+                    }
+                    
                     Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
                     Win32CopyBufferToWindow(deviceContext, &GlobalBackbuffer, dimensions.width, dimensions.height);
                     
-                    uint64 endCycleCount = __rdtsc();
-                    
-                    LARGE_INTEGER endCounter;
-                    QueryPerformanceCounter(&endCounter);
-                    
-                    uint64 cyclesElapsed = endCycleCount - lastCycleCount;
-                    int64 counterElapsed = endCounter.QuadPart - lastCounter.QuadPart;
-                    int32 msDeltaTime = (int32)((1000 * counterElapsed) / perfCountFrequency);
-                    int32 fps = (int32)(perfCountFrequency / counterElapsed);
-                    uint32 MCPF = (uint32)cyclesElapsed / 1000000;
-                    #if 0
-                    char buffer[256];
-                    wsprintfA(buffer, "ms/frame: %d, FPS: %d, MCPF: %d\n", msDeltaTime, fps, MCPF);
-                    OutputDebugStringA(buffer);
-                    #endif
-                    lastCounter = endCounter;
-                    lastCycleCount = endCycleCount;
-                    
-                    // TODO: Swap function
+                    // TODO: Swap macro
                     MP_INPUT* temp = newInput;
                     newInput = oldInput;
                     oldInput = temp;
+                    
+                    LARGE_INTEGER endCounter = Win32GetClockValue();
+                    
+                    #if 1
+                    double msDeltaTime = 1000.0f * Win32GetSecondsElapsed(lastCounter, endCounter);
+                    #endif
+                    lastCounter = endCounter;
+                    
+                    uint64 endCycleCount = __rdtsc();
+                    uint64 cyclesElapsed = endCycleCount - lastCycleCount;
+                    lastCycleCount = endCycleCount;
+                    
+                    #if 1
+                    double fps = 1000.0f / msDeltaTime;
+                    double MCPF = (double)cyclesElapsed / 1000000.0f;
+                    
+                    char stringBuffer[256];
+                    _snprintf_s(stringBuffer, sizeof(stringBuffer), "ms/frame: %.02f, FPS: %.02f, MCPF: %.02f\n", msDeltaTime, fps, MCPF);
+                    OutputDebugStringA(stringBuffer);
+                    #endif
                 }
             }
             else
             {
-            // ASSERT: Game or samples failed to init
+                // Log error: Game or samples failed to init
             }
         }
         else
         {
-            // ASSERT: Window creation failed
+            // Log error: Window creation failed
         }
     }
     else
     {
-        // ASSERT: Registering window class failed
+        // Log error: Registering window class failed
     }
 
     return 0;
