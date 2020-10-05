@@ -17,6 +17,8 @@ internal void OutputSound(MP_SOUNDOUTPUTBUFFER* soundBuffer, int16 toneFrequency
         *sampleOut++ = sampleValue;
         
         tSine += 2.0f * PI32 / (float)wavePeriod;
+        if(tSine >= 2.0f * PI32)
+            tSine -= 2.0f * PI32;
     }
 }
 
@@ -39,10 +41,9 @@ internal void RenderGradient(MP_OFFSCREENBUFFER* buffer, int xOffset, int yOffse
     }
 }
 
-internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_SOUNDOUTPUTBUFFER* soundBuffer, MP_OFFSCREENBUFFER* buffer)
+internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer)
 {
     MP_GAMESTATE* gameState = (MP_GAMESTATE*)gameMemory->PermanentStorage;
-    
     MP_ASSERT(sizeof(gameState) <= gameMemory->PermanentStorageSize)
     
     if(!gameMemory->IsInitialised)
@@ -93,6 +94,11 @@ internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_SOU
         }
     }
     
-    OutputSound(soundBuffer, gameState->toneFrequency);
     RenderGradient(buffer, gameState->blueOffset, gameState->greenOffset);
+}
+
+internal void GetSoundSamples(MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
+{
+    MP_GAMESTATE* gameState = (MP_GAMESTATE*)gameMemory->PermanentStorage;
+    OutputSound(soundBuffer, gameState->toneFrequency);
 }

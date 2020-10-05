@@ -132,5 +132,7 @@ struct MP_MEMORY
     void* TransientStorage; // NOTE: Set to zero before allocation!
 };
 
-// Requires: timestep, input, bitmap buffer and sound buffer
-internal void GameUpdateAndRender(MP_MEMORY* memory, MP_INPUT* input, MP_SOUNDOUTPUTBUFFER* soundBuffer, MP_OFFSCREENBUFFER* buffer);
+// TODO: Rename to update or something else
+internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer);
+// NOTE: This function needs to be fast to keep audio latency low
+internal void GetSoundSamples(MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer);
