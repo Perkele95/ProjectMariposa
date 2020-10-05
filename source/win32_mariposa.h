@@ -41,3 +41,11 @@ struct Win32DebugTimeMarker
     DWORD FlipPlayCursor;
     DWORD FlipWriteCursor;
 };
+
+struct Win32GameCode
+{
+    HMODULE DLL;
+    game_update_and_render* UpdateAndRender;
+    get_sound_samples* GetSoundSamples;
+    bool32 IsValid;
+};

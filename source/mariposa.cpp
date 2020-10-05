@@ -2,23 +2,22 @@
 
 #include <math.h>
 
-internal void OutputSound(MP_SOUNDOUTPUTBUFFER* soundBuffer, int16 toneFrequency)
+internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBuffer, int16 toneFrequency)
 {
-    local_persist float tSine;
     int16 toneVolume = 3000;
     int wavePeriod = soundBuffer->SamplesPerSecond / toneFrequency;
     
     int16* sampleOut = soundBuffer->Samples;
     for(DWORD sampleIndex = 0; sampleIndex < soundBuffer->SampleCount; sampleIndex++)
     {
-        float sineValue = sinf(tSine);
+        float sineValue = sinf(gameState->tSine);
         int16 sampleValue = (int16)(sineValue * toneVolume);
         *sampleOut++ = sampleValue;
         *sampleOut++ = sampleValue;
         
-        tSine += 2.0f * PI32 / (float)wavePeriod;
-        if(tSine >= 2.0f * PI32)
-            tSine -= 2.0f * PI32;
+        gameState->tSine += 2.0f * PI32 / (float)wavePeriod;
+        if(gameState->tSine >= 2.0f * PI32)
+            gameState->tSine -= 2.0f * PI32;
     }
 }
 
@@ -34,27 +33,27 @@ internal void RenderGradient(MP_OFFSCREENBUFFER* buffer, int xOffset, int yOffse
             uint8 blue = (uint8)(x + xOffset);
             uint8 green = (uint8)(y + yOffset);
             
-            *pixel++ = blue | (green << 8);
+            *pixel++ = blue | (green << 16);
         }
         
         row += buffer->Pitch;
     }
 }
 
-internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer)
+extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     MP_GAMESTATE* gameState = (MP_GAMESTATE*)gameMemory->PermanentStorage;
-    MP_ASSERT(sizeof(gameState) <= gameMemory->PermanentStorageSize)
+    MP_ASSERT(sizeof(gameState) <= gameMemory->PermanentStorageSize);
     
     if(!gameMemory->IsInitialised)
     {
         char* fileName = __FILE__;
         
-        debug_read_file_result file = DEBUG_PlatformReadEntireFile(fileName);
+        debug_read_file_result file = gameMemory->DEBUGPlatformReadEntireFile(fileName);
         if(file.data)
         {
-            DEBUG_PlatformWriteEntireFile("test.out", &file);
-            DEBUG_PlatformFreeFileMemory(file.data);
+            gameMemory->DEBUGPlatformWriteEntireFile("../data/test.out", &file);
+            gameMemory->DEBUGPlatformFreeFileMemory(file.data);
         }
         
         gameState->toneFrequency = 256;
@@ -97,8 +96,13 @@ internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFF
     RenderGradient(buffer, gameState->blueOffset, gameState->greenOffset);
 }
 
-internal void GetSoundSamples(MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
+extern "C" GET_SOUND_SAMPLES(GetSoundSamples)
 {
     MP_GAMESTATE* gameState = (MP_GAMESTATE*)gameMemory->PermanentStorage;
-    OutputSound(soundBuffer, gameState->toneFrequency);
+    OutputSound(gameState, soundBuffer, gameState->toneFrequency);
+}
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved )
+{
+    return TRUE;
 }

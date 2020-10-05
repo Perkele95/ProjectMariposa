@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Windows.h>
-
 /*
     // BUILD OPTIONS:
     MP_INTERNAL:
@@ -14,17 +12,39 @@
 #define MP_INTERNAL 1
 #define MP_PERFORMANCE 0
 
-#if MP_INTERNAL
-    // THIS IS NOT FOR RELEASE VERSION, IT DOESN'T PROTECT AGAINST LOST DATA
-    struct debug_read_file_result
-    {
-        void* data;
-        uint32 dataSize;
-    };
+#define internal static
+#define local_persist static
+#define global_variable static
+#define PI32 3.14159265359f
 
-    internal debug_read_file_result DEBUG_PlatformReadEntireFile(char* filename);
-    internal bool32 DEBUG_PlatformWriteEntireFile(char* fileName, debug_read_file_result* readData);
-    internal void DEBUG_PlatformFreeFileMemory(void* memory);
+typedef unsigned char uint8;
+typedef unsigned short uint16;
+typedef unsigned int uint32;
+typedef unsigned long long uint64;
+typedef signed char int8;
+typedef short int16;
+typedef int int32;
+typedef long long int64;
+typedef int32 bool32;
+
+#include <Windows.h>
+
+#if MP_INTERNAL
+// THIS IS NOT FOR RELEASE VERSION, IT DOESN'T PROTECT AGAINST LOST DATA
+struct debug_read_file_result
+{
+    void* data;
+    uint32 dataSize;
+};
+
+#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(char* fileName)
+typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
+
+#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool32 name(char* fileName, debug_read_file_result* readData)
+typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
+
+#define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void* memory)
+typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
 #else
 #endif
 
@@ -119,6 +139,7 @@ struct MP_GAMESTATE
     int blueOffset;
     int greenOffset;
     int16 toneFrequency;
+    float tSine;
 };
 
 struct MP_MEMORY
@@ -130,9 +151,17 @@ struct MP_MEMORY
     
     uint64 TransientStorageSize;
     void* TransientStorage; // NOTE: Set to zero before allocation!
+    
+    debug_platform_read_entire_file* DEBUGPlatformReadEntireFile;
+    debug_platform_write_entire_file* DEBUGPlatformWriteEntireFile;
+    debug_platform_free_file_memory* DEBUGPlatformFreeFileMemory;
 };
 
-// TODO: Rename to update or something else
-internal void GameUpdateAndRender(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer);
+#define GAME_UPDATE_AND_RENDER(name) void name(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer)
+typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
+GAME_UPDATE_AND_RENDER(GameUpdateAndRenderStub){}
+
 // NOTE: This function needs to be fast to keep audio latency low
-internal void GetSoundSamples(MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer);
+#define GET_SOUND_SAMPLES(name) void name(MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
+typedef GET_SOUND_SAMPLES(get_sound_samples);
+GET_SOUND_SAMPLES(GetSoundSamplesStub){}

@@ -1,22 +1,4 @@
-#define internal static
-#define local_persist static
-#define global_variable static
-
-#define PI32 3.14159265359f
-
-typedef unsigned char uint8;
-typedef unsigned short uint16;
-typedef unsigned int uint32;
-typedef unsigned long long uint64;
-
-typedef signed char int8;
-typedef short int16;
-typedef int int32;
-typedef long long int64;
-
-typedef int32 bool32;
-
-#include "mariposa.cpp"
+#include "mariposa.h"
 
 #include <Xinput.h>
 #include <dsound.h>
@@ -47,7 +29,12 @@ global_variable x_Input_Set_State* _XInputSetState = XInputSetStateStub;
 #define XInputGetState _XInputGetState
 #define XInputSetState _XInputSetState
 
-internal debug_read_file_result DEBUG_PlatformReadEntireFile(char* fileName)
+DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUGPlatformFreeFileMemory)
+{
+    VirtualFree(memory, 0, MEM_RELEASE);
+}
+
+DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile)
 {
     debug_read_file_result result = {};
     
@@ -68,7 +55,7 @@ internal debug_read_file_result DEBUG_PlatformReadEntireFile(char* fileName)
                 }
                 else
                 {
-                    DEBUG_PlatformFreeFileMemory(result.data);
+                    DEBUGPlatformFreeFileMemory(result.data);
                     result.data = 0;
                 }
             }
@@ -92,12 +79,7 @@ internal debug_read_file_result DEBUG_PlatformReadEntireFile(char* fileName)
     return result;
 }
 
-internal void DEBUG_PlatformFreeFileMemory(void* memory)
-{
-    VirtualFree(memory, 0, MEM_RELEASE);
-}
-
-internal bool32 DEBUG_PlatformWriteEntireFile(char* fileName, debug_read_file_result* readData)
+DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile)
 {
     bool32 result = false;
     void* fileHandle = CreateFileA(fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
@@ -121,6 +103,42 @@ internal bool32 DEBUG_PlatformWriteEntireFile(char* fileName, debug_read_file_re
     }
     
     return result;
+}
+
+internal Win32GameCode Win32LoadGameCode(void)
+{
+    Win32GameCode result = {};
+    
+    CopyFileA("mariposa.exe", "mariposa_temp.dll", FALSE);
+    result.DLL = LoadLibraryA("mariposa_temp.dll");
+    if(result.DLL)
+    {
+        result.UpdateAndRender = (game_update_and_render*)GetProcAddress(result.DLL, "GameUpdateAndRender");
+        result.GetSoundSamples = (get_sound_samples*)GetProcAddress(result.DLL, "GetSoundSamples");
+        
+        result.IsValid = (result.UpdateAndRender && result.GetSoundSamples);
+    }
+    
+    if(!result.IsValid)
+    {
+        result.UpdateAndRender = GameUpdateAndRenderStub;
+        result.GetSoundSamples = GetSoundSamplesStub;
+    }
+    
+    return result;
+}
+
+internal void Win32UnloadGameCode(Win32GameCode* gameCode)
+{
+    if(gameCode->DLL)
+    {
+        FreeLibrary(gameCode->DLL);
+        gameCode->DLL = 0;
+    }
+    
+    gameCode->IsValid = false;
+    gameCode->UpdateAndRender = GameUpdateAndRenderStub;
+    gameCode->GetSoundSamples = GetSoundSamplesStub;
 }
 
 internal void Win32LoadXInput(void)
@@ -677,6 +695,9 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             MP_MEMORY gameMemory = {};
             gameMemory.PermanentStorageSize = MegaBytes(64);
             gameMemory.TransientStorageSize = GigaBytes(1);
+            gameMemory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
+            gameMemory.DEBUGPlatformReadEntireFile = DEBUGPlatformReadEntireFile;
+            gameMemory.DEBUGPlatformWriteEntireFile = DEBUGPlatformWriteEntireFile;
             
             uint64 totalSize = gameMemory.PermanentStorageSize + gameMemory.TransientStorageSize;
             gameMemory.PermanentStorage = VirtualAlloc(baseAddress, (size_t)totalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -701,8 +722,19 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 
                 uint64 lastCycleCount = __rdtsc();
                 
+                Win32GameCode game = Win32LoadGameCode();
+                uint32 loadCounter = 0;
+                
                 while(GlobalRunning)
-                {                    
+                {
+                    if(loadCounter > 120)
+                    {
+                        Win32UnloadGameCode(&game);
+                        game = Win32LoadGameCode();
+                        loadCounter = 0;
+                    }
+                    loadCounter++;
+                    
                     MP_CONTROLLER_INPUT* oldKeyboardController = GetController(oldInput, 0);
                     MP_CONTROLLER_INPUT* newKeyboardController = GetController(newInput, 0);
                     *newKeyboardController = {};
@@ -797,7 +829,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     buffer.Width = GlobalBackbuffer.Width;
                     buffer.Height = GlobalBackbuffer.Height;
                     buffer.Pitch = GlobalBackbuffer.Pitch;
-                    GameUpdateAndRender(&gameMemory, newInput, &buffer);
+                    
+                    game.UpdateAndRender(&gameMemory, newInput, &buffer);
                     
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
@@ -873,7 +906,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         soundBuffer.SamplesPerSecond = soundOutput.SamplesPerSecond;
                         soundBuffer.SampleCount = bytesToWrite / soundOutput.BytesPerSample;
                         soundBuffer.Samples = samples;
-                        GetSoundSamples(&gameMemory, &soundBuffer);
+                        game.GetSoundSamples(&gameMemory, &soundBuffer);
                         
                         #if MP_INTERNAL
                         Win32DebugTimeMarker* marker = &debugTimeMarkers[debugTimeMarkerIndex];
@@ -1001,6 +1034,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
     {
         // Log error: Registering window class failed
     }
-
+    
     return 0;
 }
