@@ -50,3 +50,15 @@ struct Win32GameCode
     get_sound_samples* GetSoundSamples;
     bool32 IsValid;
 };
+
+struct Win32State
+{
+    uint64 TotalSize;
+    void* GameMemoryBlock;
+    
+    HANDLE RecordingHandle;
+    int InputRecordingIndex;
+    
+    HANDLE PlaybackHandle;
+    int InputPlaybackIndex;
+};

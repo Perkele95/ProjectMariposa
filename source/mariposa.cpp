@@ -14,7 +14,7 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
         int16 sampleValue = (int16)(sineValue * toneVolume);
         *sampleOut++ = sampleValue;
         *sampleOut++ = sampleValue;
-        
+             
         gameState->tSine += 2.0f * PI32 * 1.0f / (float)wavePeriod;
         if(gameState->tSine >= 2.0f * PI32)
             gameState->tSine -= 2.0f * PI32;
@@ -33,7 +33,7 @@ internal void RenderGradient(MP_OFFSCREENBUFFER* buffer, int xOffset, int yOffse
             uint8 blue = (uint8)(x + xOffset);
             uint8 green = (uint8)(y + yOffset);
             
-            *pixel++ = blue | (green << 8);
+            *pixel++ = blue | (green << 16);
         }
         
         row += buffer->Pitch;
@@ -57,6 +57,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         }
         
         gameState->toneFrequency = 256;
+        gameState->tSine = 0.0f;
         
         // TODO: Perhaps put this into platform layer
         gameMemory->IsInitialised = true;
