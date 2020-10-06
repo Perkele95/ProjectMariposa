@@ -105,12 +105,24 @@ DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile)
     return result;
 }
 
-internal Win32GameCode Win32LoadGameCode(void)
+inline FILETIME Win32GetLastWriteTime(char* fileName)
+{
+    WIN32_FIND_DATAA findData = {};
+    HANDLE fileHandle = FindFirstFileA(fileName, &findData);
+    if(fileHandle != INVALID_HANDLE_VALUE)
+        FindClose(fileHandle);
+    
+    return findData.ftLastWriteTime;
+}
+
+internal Win32GameCode Win32LoadGameCode(char* sourceDLLName, char* tempDLLName)
 {
     Win32GameCode result = {};
     
-    CopyFileA("mariposa.exe", "mariposa_temp.dll", FALSE);
-    result.DLL = LoadLibraryA("mariposa_temp.dll");
+    result.DLLLastWriteTime = Win32GetLastWriteTime(sourceDLLName);
+    
+    CopyFileA(sourceDLLName, tempDLLName, FALSE);
+    result.DLL = LoadLibraryA(tempDLLName);
     if(result.DLL)
     {
         result.UpdateAndRender = (game_update_and_render*)GetProcAddress(result.DLL, "GameUpdateAndRender");
@@ -631,8 +643,43 @@ internal void Win32DebugSyncDisplay(win32OffscreenBuffer* backBuffer, int marker
     }
 }
 
+internal void ConcatenateStrings(uint64 aCount, char* a, uint64 bCount, char* b, uint64 destCount, char* dest)
+{
+    for(int i = 0; i < aCount; i++)
+    {
+        *dest++ = *a++;
+    }
+    for(int i = 0; i < bCount; i++)
+    {
+        *dest++ = *b++;
+    }
+    
+    *dest++ = 0;
+}
+
 INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
+    char exeFileName[MAX_PATH];
+    DWORD sizeOfFileName = GetModuleFileNameA(0, exeFileName, sizeof(exeFileName));
+    char* onePastLastSlash = exeFileName;
+    for(char* scan = exeFileName; *scan; scan++)
+    {
+        if(*scan == '\\')
+            onePastLastSlash = scan + 1;
+    }
+    
+    char sourceDLLFileName[] = "mariposa.dll";
+    char sourceDLLFullPath[MAX_PATH];
+    ConcatenateStrings(onePastLastSlash - exeFileName, exeFileName,
+                        sizeof(sourceDLLFileName) - 1, sourceDLLFileName, 
+                        sizeof(sourceDLLFullPath), sourceDLLFullPath);
+    
+    char tempDLLFileName[] = "mariposa_temp.dll";
+    char tempDLLFullPath[MAX_PATH];
+    ConcatenateStrings(onePastLastSlash - exeFileName, exeFileName,
+                        sizeof(tempDLLFileName) - 1, tempDLLFileName, 
+                        sizeof(tempDLLFullPath), tempDLLFullPath);
+    
     LARGE_INTEGER PerfCountFrequencyResult;
     QueryPerformanceFrequency(&PerfCountFrequencyResult);
     GlobalPerfCountFrequency = PerfCountFrequencyResult.QuadPart;
@@ -655,7 +702,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
     // TODO: refresh rate needs to be queried instead of set to a fixed value
     #define refreshRate 60
     #define gameRefreshRate (refreshRate / 2)
-    float expectedDeltaTime = 1.0f / (float)gameRefreshRate;
+    float expectedDeltaTime = 0.0f / ((float)gameRefreshRate);
     
     if(RegisterClassA(&windowClass))
     {
@@ -675,7 +722,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             soundOutput.BytesPerSample = 2 * sizeof(int16);
             soundOutput.SecondaryBufferSize = soundOutput.SamplesPerSecond * soundOutput.BytesPerSample;
             // TODO: remove LatencySampleCount
-            soundOutput.LatencySampleCount = 3 * soundOutput.SamplesPerSecond / gameRefreshRate;
             soundOutput.SafetyBytes = soundOutput.SamplesPerSecond * soundOutput.BytesPerSample / (3 * gameRefreshRate);
             
             Win32InitDirectSound(window, soundOutput.SamplesPerSecond, soundOutput.SecondaryBufferSize);
@@ -720,20 +766,17 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 DWORD audioLatencyBytes = 0;
                 float audioLatencySeconds = 0;
                 
+                Win32GameCode game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath);
+                
                 uint64 lastCycleCount = __rdtsc();
-                
-                Win32GameCode game = Win32LoadGameCode();
-                uint32 loadCounter = 0;
-                
                 while(GlobalRunning)
                 {
-                    if(loadCounter > 120)
+                    FILETIME newDLLWriteTime = Win32GetLastWriteTime(sourceDLLFullPath);
+                    if(CompareFileTime(&newDLLWriteTime, &game.DLLLastWriteTime) != 0)
                     {
                         Win32UnloadGameCode(&game);
-                        game = Win32LoadGameCode();
-                        loadCounter = 0;
+                        game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath);
                     }
-                    loadCounter++;
                     
                     MP_CONTROLLER_INPUT* oldKeyboardController = GetController(oldInput, 0);
                     MP_CONTROLLER_INPUT* newKeyboardController = GetController(newInput, 0);
@@ -939,7 +982,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     float workSecondsElapsed = Win32GetSecondsElapsed(lastCounter, workCounter);
                     
                     float secondsElapsedForFrame = workSecondsElapsed;
-                    expectedDeltaTime /= 2; // NOTE: somehow this fixed the audio popping
                     if(secondsElapsedForFrame < expectedDeltaTime)
                     {
                         if(sleepIsGranular)

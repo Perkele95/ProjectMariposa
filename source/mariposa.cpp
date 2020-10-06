@@ -15,7 +15,7 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
         *sampleOut++ = sampleValue;
         *sampleOut++ = sampleValue;
         
-        gameState->tSine += 2.0f * PI32 / (float)wavePeriod;
+        gameState->tSine += 2.0f * PI32 * 1.0f / (float)wavePeriod;
         if(gameState->tSine >= 2.0f * PI32)
             gameState->tSine -= 2.0f * PI32;
     }
@@ -33,7 +33,7 @@ internal void RenderGradient(MP_OFFSCREENBUFFER* buffer, int xOffset, int yOffse
             uint8 blue = (uint8)(x + xOffset);
             uint8 green = (uint8)(y + yOffset);
             
-            *pixel++ = blue | (green << 16);
+            *pixel++ = blue | (green << 8);
         }
         
         row += buffer->Pitch;
@@ -100,9 +100,4 @@ extern "C" GET_SOUND_SAMPLES(GetSoundSamples)
 {
     MP_GAMESTATE* gameState = (MP_GAMESTATE*)gameMemory->PermanentStorage;
     OutputSound(gameState, soundBuffer, gameState->toneFrequency);
-}
-
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved )
-{
-    return TRUE;
 }
