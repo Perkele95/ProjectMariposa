@@ -29,6 +29,48 @@ global_variable x_Input_Set_State* _XInputSetState = XInputSetStateStub;
 #define XInputGetState _XInputGetState
 #define XInputSetState _XInputSetState
 
+internal void ConcatenateStrings(uint64 aCount, char* a, uint64 bCount, char* b, uint64 destCount, char* dest)
+{
+    for(int i = 0; i < aCount; i++)
+    {
+        *dest++ = *a++;
+    }
+    for(int i = 0; i < bCount; i++)
+    {
+        *dest++ = *b++;
+    }
+    
+    *dest++ = 0;
+}
+
+internal void Win32GetExeFilename(Win32State* state)
+{
+    DWORD sizeOffilename = GetModuleFileNameA(0, state->ExeFilename, sizeof(state->ExeFilename));
+    state->OnePastLastSlash = state->ExeFilename;
+    for(char* scan = state->ExeFilename; *scan; scan++)
+    {
+        if(*scan == '\\')
+            state->OnePastLastSlash = scan + 1;
+    }
+}
+
+internal int StringLength(char* string)
+{
+    int charCount = 0;
+    while(*string++)
+    {
+        charCount++;
+    }
+    return charCount;
+}
+
+internal void Win32BuildEXEFilepathName(Win32State* state, char* filename, char* dest, int destCount)
+{
+    ConcatenateStrings(state->OnePastLastSlash - state->ExeFilename, state->ExeFilename,
+                        StringLength(filename), filename, 
+                        destCount, dest);
+}
+
 DEBUG_PLATFORM_FREE_FILE_MEMORY(DEBUGPlatformFreeFileMemory)
 {
     VirtualFree(memory, 0, MEM_RELEASE);
@@ -38,7 +80,7 @@ DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile)
 {
     debug_read_file_result result = {};
     
-    void* fileHandle = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    void* fileHandle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if(fileHandle != INVALID_HANDLE_VALUE)
     {
         LARGE_INTEGER fileSize;
@@ -82,7 +124,7 @@ DEBUG_PLATFORM_READ_ENTIRE_FILE(DEBUGPlatformReadEntireFile)
 DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile)
 {
     bool32 result = false;
-    void* fileHandle = CreateFileA(fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+    void* fileHandle = CreateFileA(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     if(fileHandle != INVALID_HANDLE_VALUE)
     {
         DWORD bytesWritten;
@@ -105,22 +147,25 @@ DEBUG_PLATFORM_WRITE_ENTIRE_FILE(DEBUGPlatformWriteEntireFile)
     return result;
 }
 
-inline FILETIME Win32GetLastWriteTime(char* fileName)
+inline FILETIME Win32GetLastWriteTime(char* filename)
 {
-    WIN32_FIND_DATAA findData = {};
-    HANDLE fileHandle = FindFirstFileA(fileName, &findData);
-    if(fileHandle != INVALID_HANDLE_VALUE)
-        FindClose(fileHandle);
+    FILETIME lastWriteTime = {};
+    _WIN32_FILE_ATTRIBUTE_DATA fileInfo;
     
-    return findData.ftLastWriteTime;
+    if(GetFileAttributesExA(filename, GetFileExInfoStandard, &fileInfo))
+    {
+        lastWriteTime = fileInfo.ftLastWriteTime;
+    }
+    
+    return lastWriteTime;
 }
 
-internal Win32GameCode Win32LoadGameCode(char* sourceDLLName, char* tempDLLName, char* lockFileName)
+internal Win32GameCode Win32LoadGameCode(char* sourceDLLName, char* tempDLLName, char* lockfilename)
 {
     Win32GameCode result = {};
     
     WIN32_FILE_ATTRIBUTE_DATA data;
-    if(!GetFileAttributesExA(lockFileName, GetFileExInfoStandard, &data))
+    if(!GetFileAttributesExA(lockfilename, GetFileExInfoStandard, &data))
     {
         result.DLLLastWriteTime = Win32GetLastWriteTime(sourceDLLName);
         
@@ -137,8 +182,8 @@ internal Win32GameCode Win32LoadGameCode(char* sourceDLLName, char* tempDLLName,
     
     if(!result.IsValid)
     {
-        result.UpdateAndRender = GameUpdateAndRenderStub;
-        result.GetSoundSamples = GetSoundSamplesStub;
+        result.UpdateAndRender = 0;
+        result.GetSoundSamples = 0;
     }
     
     return result;
@@ -153,8 +198,8 @@ internal void Win32UnloadGameCode(Win32GameCode* gameCode)
     }
     
     gameCode->IsValid = false;
-    gameCode->UpdateAndRender = GameUpdateAndRenderStub;
-    gameCode->GetSoundSamples = GetSoundSamplesStub;
+    gameCode->UpdateAndRender = 0;
+    gameCode->GetSoundSamples = 0;
 }
 
 internal void Win32LoadXInput(void)
@@ -314,10 +359,13 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
         
         case WM_ACTIVATEAPP:
         {
+            // TODO: Remove if this feature is unecessary
+            #if 0
             if(wParam)
                 SetLayeredWindowAttributes(window, 0xFFFFFF, 0x9F, LWA_COLORKEY);
             else
                 SetLayeredWindowAttributes(window, 0xFFFFFF, 0x9F, LWA_ALPHA);
+            #endif
         } break;
         
         case WM_SYSKEYDOWN:
@@ -427,11 +475,20 @@ internal float Win32ProcessXInputStickPosition(short value, short deadZoneThresh
     return result;
 }
 
+internal void Win32GetInputFileLocation(Win32State* state, int slotIndex, char* dest, int destCount)
+{
+    MP_ASSERT(slotIndex == 1);
+    Win32BuildEXEFilepathName(state, "input_recording.mpr", dest, destCount);
+}
+
 internal void Win32BeginInputRecording(Win32State* state, int inputRecordingIndex)
 {
     state->InputRecordingIndex = inputRecordingIndex;
-    char* fileName = "test.mpr";
-    state->RecordingHandle = CreateFileA(fileName, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+    
+    char filename[MAX_PATH];
+    Win32GetInputFileLocation(state, inputRecordingIndex, filename, sizeof(filename));
+    
+    state->RecordingHandle = CreateFileA(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
     
     DWORD bytesToWrite = (DWORD)state->TotalSize;
     MP_ASSERT(state->TotalSize == bytesToWrite);
@@ -448,8 +505,11 @@ internal void Win32EndInputRecording(Win32State* state)
 internal void Win32BeginInputPlayback(Win32State* state, int inputPlaybackIndex)
 {
     state->InputPlaybackIndex = inputPlaybackIndex;
-    char* fileName = "test.mpr";
-    state->PlaybackHandle = CreateFileA(fileName, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    
+    char filename[MAX_PATH];
+    Win32GetInputFileLocation(state, inputPlaybackIndex, filename, sizeof(filename));
+    
+    state->PlaybackHandle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     
     DWORD bytesToRead = (DWORD)state->TotalSize;
     MP_ASSERT(state->TotalSize == bytesToRead);
@@ -511,55 +571,55 @@ internal void Win32ProcessPendingMessages(Win32State* state ,MP_CONTROLLER_INPUT
             case WM_KEYDOWN:
             case WM_KEYUP:
             {
-                uint32 VKCode = (uint32)message.wParam;
+                uint32 keyCode = (uint32)message.wParam;
                 bool32 wasDown = ((message.lParam & (1 << 30)) != 0);
                 bool32 isDown = ((message.lParam & (1 << 31)) == 0);
                 if(wasDown != isDown)
                 {
-                    if(VKCode == 'W')
+                    if(keyCode == 'W')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Up, isDown);
                     }
-                    else if(VKCode == 'A')
+                    else if(keyCode == 'A')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Left, isDown);
                     }
-                    else if(VKCode == 'S')
+                    else if(keyCode == 'S')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Down, isDown);
                     }
-                    else if(VKCode == 'D')
+                    else if(keyCode == 'D')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Right, isDown);
                     }
-                    else if(VKCode == 'Q')
+                    else if(keyCode == 'Q')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Q, isDown);
                     }
-                    else if(VKCode == 'E')
+                    else if(keyCode == 'E')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->E, isDown);
                     }
-                    else if(VKCode == 'F')
+                    else if(keyCode == 'F')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->F, isDown);
                     }
-                    else if(VKCode == 'G')
+                    else if(keyCode == 'G')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->G, isDown);
                     }
-                    else if(VKCode == 'C')
+                    else if(keyCode == 'C')
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->C, isDown);
                     }
-                    else if(VKCode == 'P')
+                    else if(keyCode == 'P')
                     {
                         #if MP_INTERNAL
                         if(isDown)
                             GlobalPause = !GlobalPause;
                         #endif
                     }
-                    else if(VKCode == 'L')
+                    else if(keyCode == 'L')
                     {
                         if(isDown)
                         {
@@ -574,35 +634,35 @@ internal void Win32ProcessPendingMessages(Win32State* state ,MP_CONTROLLER_INPUT
                             }
                         }
                     }
-                    else if(VKCode == VK_UP)
+                    else if(keyCode == VK_UP)
                     {
                         // do
                     }
-                    else if(VKCode == VK_DOWN)
+                    else if(keyCode == VK_DOWN)
                     {
                         // do
                     }
-                    else if(VKCode == VK_LEFT)
+                    else if(keyCode == VK_LEFT)
                     {
                         // do
                     }
-                    else if(VKCode == VK_RIGHT)
+                    else if(keyCode == VK_RIGHT)
                     {
                         // do
                     }
-                    else if(VKCode == VK_SPACE)
+                    else if(keyCode == VK_SPACE)
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Jump, isDown);
                     }
-                    else if(VKCode == VK_ESCAPE)
+                    else if(keyCode == VK_ESCAPE)
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Escape, isDown);
                     }
-                    else if(VKCode == VK_CONTROL)
+                    else if(keyCode == VK_CONTROL)
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Crouch, isDown);
                     }
-                    else if(VKCode == VK_SHIFT)
+                    else if(keyCode == VK_SHIFT)
                     {
                         Win32ProcessKeyboardEvent(&keyboardController->Sprint, isDown);
                     }
@@ -612,7 +672,7 @@ internal void Win32ProcessPendingMessages(Win32State* state ,MP_CONTROLLER_INPUT
                     }
                 }
                 bool32 altKeyDown = (message.lParam & (1 << 29));
-                if(VKCode == VK_F4 && altKeyDown)
+                if(keyCode == VK_F4 && altKeyDown)
                 {
                     GlobalRunning = false;
                 }
@@ -722,49 +782,20 @@ internal void Win32DebugSyncDisplay(win32OffscreenBuffer* backBuffer, int marker
     }
 }
 
-internal void ConcatenateStrings(uint64 aCount, char* a, uint64 bCount, char* b, uint64 destCount, char* dest)
-{
-    for(int i = 0; i < aCount; i++)
-    {
-        *dest++ = *a++;
-    }
-    for(int i = 0; i < bCount; i++)
-    {
-        *dest++ = *b++;
-    }
-    
-    *dest++ = 0;
-}
-
 INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
-    char exeFileName[MAX_PATH];
-    DWORD sizeOfFileName = GetModuleFileNameA(0, exeFileName, sizeof(exeFileName));
-    char* onePastLastSlash = exeFileName;
-    for(char* scan = exeFileName; *scan; scan++)
-    {
-        if(*scan == '\\')
-            onePastLastSlash = scan + 1;
-    }
+    Win32State win32State = {};
     
-    char sourceDLLFileName[] = "mariposa.dll";
+    Win32GetExeFilename(&win32State);
+    
     char sourceDLLFullPath[MAX_PATH];
-    ConcatenateStrings(onePastLastSlash - exeFileName, exeFileName,
-                        sizeof(sourceDLLFileName) - 1, sourceDLLFileName, 
-                        sizeof(sourceDLLFullPath), sourceDLLFullPath);
+    Win32BuildEXEFilepathName(&win32State, "mariposa.dll", sourceDLLFullPath, sizeof(sourceDLLFullPath));
     
-    char tempDLLFileName[] = "mariposa_temp.dll";
     char tempDLLFullPath[MAX_PATH];
-    ConcatenateStrings(onePastLastSlash - exeFileName, exeFileName,
-                        sizeof(tempDLLFileName) - 1, tempDLLFileName, 
-                        sizeof(tempDLLFullPath), tempDLLFullPath);
-                        
-    char lockFileName[] = "lock.tmp";
-    char lockFullPath[MAX_PATH];
-    ConcatenateStrings(onePastLastSlash - exeFileName, exeFileName,
-                        sizeof(lockFileName) - 1, lockFileName, 
-                        sizeof(lockFullPath), lockFullPath);
+    Win32BuildEXEFilepathName(&win32State, "mariposa_temp.dll", tempDLLFullPath, sizeof(tempDLLFullPath));
     
+    char lockFullPath[MAX_PATH];
+    Win32BuildEXEFilepathName(&win32State, "lock.tmp", lockFullPath, sizeof(lockFullPath));
     
     LARGE_INTEGER PerfCountFrequencyResult;
     QueryPerformanceFrequency(&PerfCountFrequencyResult);
@@ -792,7 +823,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
     
     if(RegisterClassA(&windowClass))
     {
-        HWND window = CreateWindowExA(WS_EX_TOPMOST | WS_EX_LAYERED, windowClass.lpszClassName, "Mariposa",
+        HWND window = CreateWindowExA(0, windowClass.lpszClassName, "Mariposa",
                                 WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                 CW_USEDEFAULT, CW_USEDEFAULT,
                                 CW_USEDEFAULT, CW_USEDEFAULT,
@@ -812,7 +843,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             Win32ClearSoundbuffer(&soundOutput);
             GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
             
-            Win32State win32State = {};
             GlobalRunning = true;
             
             int16* samples = (int16*)VirtualAlloc(0, soundOutput.SecondaryBufferSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -894,6 +924,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         if(XInputGetState(controllerIndex, &controllerState) == ERROR_SUCCESS)
                         {
                             newController->IsConntected = true;
+                            newController->IsAnalog = oldController->IsAnalog;
                             XINPUT_GAMEPAD* gamePad = &controllerState.Gamepad;
                             
                             // TODO: Min/Max macro
@@ -967,7 +998,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         Win32PlaybackInput(&win32State, newInput);
                     }
                     
-                    game.UpdateAndRender(&gameMemory, newInput, &buffer);
+                    if(game.UpdateAndRender)
+                        game.UpdateAndRender(&gameMemory, newInput, &buffer);
                     
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
@@ -1007,7 +1039,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         DWORD expectedSoundBytesPerFrame = soundOutput.SamplesPerSecond * soundOutput.BytesPerSample / gameRefreshRate;
                         float secondsLeftUntilFlip = (expectedDeltaTime - fromBeginToAudioSeconds);
                         DWORD expectedBytesUntilFlip = (DWORD)((secondsLeftUntilFlip / expectedDeltaTime) * (float)expectedSoundBytesPerFrame);
-                        DWORD expectedFrameBoundaryByte = playCursor + expectedSoundBytesPerFrame;
+                        DWORD expectedFrameBoundaryByte = playCursor + expectedBytesUntilFlip;
                         
                         DWORD safeWriteCursor = writeCursor;
                         if(safeWriteCursor < playCursor)
@@ -1043,7 +1075,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         soundBuffer.SamplesPerSecond = soundOutput.SamplesPerSecond;
                         soundBuffer.SampleCount = bytesToWrite / soundOutput.BytesPerSample;
                         soundBuffer.Samples = samples;
-                        game.GetSoundSamples(&gameMemory, &soundBuffer);
+                        if(game.GetSoundSamples)
+                            game.GetSoundSamples(&gameMemory, &soundBuffer);
                         
                         #if MP_INTERNAL
                         Win32DebugTimeMarker* marker = &debugTimeMarkers[debugTimeMarkerIndex];

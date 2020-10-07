@@ -46,6 +46,7 @@ struct Win32GameCode
 {
     HMODULE DLL;
     FILETIME DLLLastWriteTime;
+    // IMPORTANT: Callbacks need to be null-checked before usage
     game_update_and_render* UpdateAndRender;
     get_sound_samples* GetSoundSamples;
     bool32 IsValid;
@@ -61,4 +62,7 @@ struct Win32State
     
     HANDLE PlaybackHandle;
     int InputPlaybackIndex;
+    
+    char ExeFilename[MAX_PATH];
+    char* OnePastLastSlash;
 };

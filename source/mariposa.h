@@ -37,10 +37,10 @@ struct debug_read_file_result
     uint32 dataSize;
 };
 
-#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(char* fileName)
+#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(char* filename)
 typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
 
-#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool32 name(char* fileName, debug_read_file_result* readData)
+#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool32 name(char* filename, debug_read_file_result* readData)
 typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
 
 #define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void* memory)
@@ -159,9 +159,7 @@ struct MP_MEMORY
 
 #define GAME_UPDATE_AND_RENDER(name) void name(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
-GAME_UPDATE_AND_RENDER(GameUpdateAndRenderStub){}
 
 // NOTE: This function needs to be fast to keep audio latency low
 #define GET_SOUND_SAMPLES(name) void name(MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
 typedef GET_SOUND_SAMPLES(get_sound_samples);
-GET_SOUND_SAMPLES(GetSoundSamplesStub){}

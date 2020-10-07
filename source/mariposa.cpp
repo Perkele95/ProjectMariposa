@@ -52,8 +52,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         debug_read_file_result file = gameMemory->DEBUGPlatformReadEntireFile(fileName);
         if(file.data)
         {
-            gameMemory->DEBUGPlatformWriteEntireFile("../data/test.out", &file);
-            gameMemory->DEBUGPlatformFreeFileMemory(file.data);
+            //gameMemory->DEBUGPlatformWriteEntireFile("../data/test.out", &file);
+            //gameMemory->DEBUGPlatformFreeFileMemory(file.data);
         }
         
         gameState->toneFrequency = 256;
