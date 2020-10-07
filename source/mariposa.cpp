@@ -4,7 +4,7 @@
 
 internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBuffer, int16 toneFrequency)
 {
-    int16 toneVolume = 3000;
+    int16 toneVolume = 2000;
     int wavePeriod = soundBuffer->SamplesPerSecond / toneFrequency;
     
     int16* sampleOut = soundBuffer->Samples;
@@ -49,14 +49,14 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     {
         char* fileName = __FILE__;
         
-        debug_read_file_result file = gameMemory->DEBUGPlatformReadEntireFile(fileName);
+        debug_read_file_result file = gameMemory->DEBUGPlatformReadEntireFile(thread, fileName);
         if(file.data)
         {
-            //gameMemory->DEBUGPlatformWriteEntireFile("../data/test.out", &file);
-            //gameMemory->DEBUGPlatformFreeFileMemory(file.data);
+            //gameMemory->DEBUGPlatformWriteEntireFile(thread, "../data/test.out", &file);
+            //gameMemory->DEBUGPlatformFreeFileMemory(thread, file.data);
         }
         
-        gameState->toneFrequency = 256;
+        gameState->toneFrequency = 312;
         gameState->tSine = 0.0f;
         
         // TODO: Perhaps put this into platform layer
@@ -93,6 +93,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             }
         }
     }
+    gameState->blueOffset = -input->Mouse.X;
+    gameState->greenOffset = -input->Mouse.Y;
     
     RenderGradient(buffer, gameState->blueOffset, gameState->greenOffset);
 }

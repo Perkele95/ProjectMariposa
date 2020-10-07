@@ -29,6 +29,11 @@ typedef int32 bool32;
 
 #include <Windows.h>
 
+struct MP_THREAD_CONTEXT
+{
+    int Placeholder;
+};
+
 #if MP_INTERNAL
 // THIS IS NOT FOR RELEASE VERSION, IT DOESN'T PROTECT AGAINST LOST DATA
 struct debug_read_file_result
@@ -37,13 +42,13 @@ struct debug_read_file_result
     uint32 dataSize;
 };
 
-#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(char* filename)
+#define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(MP_THREAD_CONTEXT* thread, char* filename)
 typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
 
-#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool32 name(char* filename, debug_read_file_result* readData)
+#define DEBUG_PLATFORM_WRITE_ENTIRE_FILE(name) bool32 name(MP_THREAD_CONTEXT* thread, char* filename, debug_read_file_result* readData)
 typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
 
-#define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(void* memory)
+#define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(MP_THREAD_CONTEXT* thread, void* memory)
 typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
 #else
 #endif
@@ -118,9 +123,33 @@ struct MP_CONTROLLER_INPUT
     };
 };
 
+struct MP_MOUSE_BUTTON_STATE
+{
+    bool32 Up;
+    bool32 Down;
+};
+
+struct MP_MOUSE_INPUT
+{
+    int X, Y, Wheel;
+    
+    union
+    {
+        MP_MOUSE_BUTTON_STATE Buttons[3];
+        // Make sure the buttons array matches the count of buttonstate struct
+        struct 
+        {
+            MP_MOUSE_BUTTON_STATE LeftClick;
+            MP_MOUSE_BUTTON_STATE RightClick;
+            MP_MOUSE_BUTTON_STATE Middle;
+        };
+    };
+};
+
 // Controller[0] = Keyboard
 struct MP_INPUT
 {
+    MP_MOUSE_INPUT Mouse;
     // float deltaTime;
     MP_CONTROLLER_INPUT Controllers[5];
 };
@@ -157,9 +186,9 @@ struct MP_MEMORY
     debug_platform_free_file_memory* DEBUGPlatformFreeFileMemory;
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer)
+#define GAME_UPDATE_AND_RENDER(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
 
 // NOTE: This function needs to be fast to keep audio latency low
-#define GET_SOUND_SAMPLES(name) void name(MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
+#define GET_SOUND_SAMPLES(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
 typedef GET_SOUND_SAMPLES(get_sound_samples);
