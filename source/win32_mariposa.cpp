@@ -8,6 +8,8 @@
 
 #include "win32_mariposa.h"
 
+#include "mp_vulkan.cpp"
+
 // TODO: UNglobal these:
 global_variable bool32 GlobalRunning;
 global_variable bool32 GlobalPause;
@@ -1007,6 +1009,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 
                 Win32GameCode game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath, lockFullPath);
                 
+                VulkanInit();
+                
                 uint64 lastCycleCount = __rdtsc();
                 while(GlobalRunning)
                 {
@@ -1125,7 +1129,10 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     }
                     
                     if(game.UpdateAndRender)
+                    {
+                        // Vulkan update call here
                         game.UpdateAndRender(&thread, &gameMemory, newInput, &buffer, msDeltaTime);
+                    }
                     
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
@@ -1230,7 +1237,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     {
                         soundIsValid = false;
                     }
-                    
+                    // TODO: This becomes deprecated when we can enforce vSync with Vulkan
                     #if 0
                     LARGE_INTEGER workCounter = Win32GetClockValue();
                     float workSecondsElapsed = Win32GetSecondsElapsed(lastCounter, workCounter);
@@ -1267,7 +1274,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     lastCounter = endCounter;
                     
                     Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
-                    
+                    // TODO: This is replaced by better tools when we can render stuff with Vulkan
                     #if 0
                     // TODO: debugTimeMarkerIndex - 1 is wrong when debugTimeMarkerIndex = 0
                     Win32DebugSyncDisplay(&GlobalBackbuffer, ArrayCount(debugTimeMarkers), debugTimeMarkers,
@@ -1280,7 +1287,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     flipClock = Win32GetClockValue();
                     
-                    #if MP_INTERNAL
+                    // TODO: This is replaced by better tools when we can render stuff with Vulkan
+                    #if 0
                     {
                         if(GlobalSecondaryBuffer->GetCurrentPosition(&playCursor, &writeCursor) == DS_OK)
                         {
@@ -1310,7 +1318,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     OutputDebugStringA(fpsBuffer);
                     #endif
                     
-                    #if MP_INTERNAL
+                    // TODO: This is replaced by better tools when we can render stuff with Vulkan
+                    #if 0
                     debugTimeMarkerIndex++;
                     if(debugTimeMarkerIndex == ArrayCount(debugTimeMarkers))
                     {
@@ -1318,6 +1327,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     }
                     #endif
                 }
+                
+                VulkanCleanup();
             }
             else
             {

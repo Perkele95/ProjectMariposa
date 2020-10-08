@@ -1,16 +1,16 @@
 #include "mp_vulkan.h"
 
-void VulkanInit()
+void VulkanInit(void)
+{
+    OutputDebugStringA("Vulkan initialised\n");
+}
+
+void VulkanUpdate(void)
 {
     
 }
 
-void VulkanUpdate()
+void VulkanCleanup(void)
 {
-    
-}
-
-void Cleanup()
-{
-    
+    OutputDebugStringA("Vulkan cleaned up\n");
 }
