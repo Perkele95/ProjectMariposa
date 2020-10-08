@@ -14,6 +14,7 @@ global_variable bool32 GlobalPause;
 global_variable win32OffscreenBuffer GlobalBackbuffer;
 global_variable IDirectSoundBuffer* GlobalSecondaryBuffer;
 global_variable int64 GlobalPerfCountFrequency;
+global_variable WINDOWPLACEMENT GlobalWindowPos = { sizeof(GlobalWindowPos) };
 
 // ------------------------------------------------------------
 // This is support for XInputGetState and XInputSetState
@@ -330,7 +331,6 @@ internal void Win32ResizeDIBSection(win32OffscreenBuffer* buffer, int width, int
 
 internal void Win32CopyBufferToWindow(HDC deviceContext, win32OffscreenBuffer* buffer, int windowWidth, int windowHeight)
 {
-    // NOTE: int width and int height are unused
     StretchDIBits(deviceContext, 0, 0, windowWidth, windowHeight,
                                  0, 0, buffer->Width, buffer->Height,
                                  buffer->Memory,
@@ -565,6 +565,35 @@ internal void Win32PlaybackInput(Win32State* state, MP_INPUT* newInput)
     }
 }
 
+internal void Win32ToggleFullScreen(HWND window)
+{
+    // Thanks to Raymond Chan we can do this:
+    // https://devblogs.microsoft.com/oldnewthing/20100412-00/?p=14353
+    DWORD style = GetWindowLong(window, GWL_STYLE);
+    if (style & WS_OVERLAPPEDWINDOW)
+    {
+        HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi = { sizeof(mi) };
+        if (GetWindowPlacement(window, &GlobalWindowPos) && GetMonitorInfoA(monitor, &mi))
+        {
+            SetWindowLong(window, GWL_STYLE, style & ~WS_OVERLAPPEDWINDOW);
+            SetWindowPos(window, HWND_TOP,
+                        mi.rcMonitor.left, mi.rcMonitor.top,
+                        mi.rcMonitor.right - mi.rcMonitor.left,
+                        mi.rcMonitor.bottom - mi.rcMonitor.top,
+                        SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        }
+    }
+    else
+    {
+        SetWindowLong(window, GWL_STYLE, style | WS_OVERLAPPEDWINDOW);
+        SetWindowPlacement(window, &GlobalWindowPos);
+        SetWindowPos(window, NULL, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
+                    SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+    }
+}
+
 internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPUT* keyboardController, MP_MOUSE_INPUT* mouseInput)
 {
     MSG message;
@@ -580,7 +609,6 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
             
             case WM_MOUSEMOVE:
             {
-                //OutputDebugStringA("Mouse moved\n");
                 mouseInput->X = GET_X_LPARAM(message.lParam);
                 mouseInput->Y = GET_Y_LPARAM(message.lParam);
             } break;
@@ -688,6 +716,11 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
                             }
                         }
                     }
+                    else if(keyCode == 'K')
+                    {
+                        ShowCursor(mouseInput->ShowCursor);
+                        mouseInput->ShowCursor = !mouseInput->ShowCursor;
+                    }
                     else if(keyCode == VK_UP)
                     {
                         // do
@@ -725,10 +758,17 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
                         // do
                     }
                 }
-                bool32 altKeyDown = (message.lParam & (1 << 29));
-                if(keyCode == VK_F4 && altKeyDown)
+                if(isDown)
                 {
-                    GlobalRunning = false;
+                    bool32 altKeyDown = (message.lParam & (1 << 29));
+                    if(keyCode == VK_F4 && altKeyDown)
+                    {
+                        GlobalRunning = false;
+                    }
+                    if(keyCode == VK_RETURN && altKeyDown)
+                    {
+                        Win32ToggleFullScreen(message.hwnd);
+                    }
                 }
             } break;
             
@@ -956,6 +996,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 
                 LARGE_INTEGER lastCounter = Win32GetClockValue();
                 LARGE_INTEGER flipClock = Win32GetClockValue();
+                float msDeltaTime = 0.0f;
                 
                 uint32 debugTimeMarkerIndex = 0;
                 Win32DebugTimeMarker debugTimeMarkers[30] = {};
@@ -1084,7 +1125,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     }
                     
                     if(game.UpdateAndRender)
-                        game.UpdateAndRender(&thread, &gameMemory, newInput, &buffer);
+                        game.UpdateAndRender(&thread, &gameMemory, newInput, &buffer, msDeltaTime);
                     
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
@@ -1190,6 +1231,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         soundIsValid = false;
                     }
                     
+                    #if 0
                     LARGE_INTEGER workCounter = Win32GetClockValue();
                     float workSecondsElapsed = Win32GetSecondsElapsed(lastCounter, workCounter);
                     
@@ -1218,9 +1260,10 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     {
                         // Log: Missed frame!
                     }
+                    #endif
                     
                     LARGE_INTEGER endCounter = Win32GetClockValue();
-                    double msDeltaTime = 1000.0f * Win32GetSecondsElapsed(lastCounter, endCounter);
+                    msDeltaTime = 1000.0f * Win32GetSecondsElapsed(lastCounter, endCounter);
                     lastCounter = endCounter;
                     
                     Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);

@@ -1,7 +1,7 @@
 @echo off
 
 set CommonCompilerFlags=-MTd -nologo -GR- -EHa- -Od -Oi -WX -W4 -wd4201 -wd4100 -wd4189 -FC -Z7
-set CommonLinkerFlags= -incremental:no -opt:ref user32.lib Gdi32.lib winmm.lib
+set CommonLinkerFlags= -incremental:no -opt:ref user32.lib Gdi32.lib winmm.lib /LIBPATH:..\Vulkan\vulkan-1.lib
 
 IF NOT EXIST ..\build mkdir ..\build
 pushd ..\build

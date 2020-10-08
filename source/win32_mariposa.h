@@ -2,8 +2,6 @@
 
 typedef unsigned int uint32;
 
-#include <windows.h>
-
 struct win32OffscreenBuffer
 {
     BITMAPINFO Info;
@@ -24,7 +22,6 @@ struct Win32SoundOutput{
     uint32 RunningSampleIndex;
     DWORD SecondaryBufferSize;
     DWORD SafetyBytes;
-    float tSine;
     // NOTE: Math might get simpler if we add bytesPerSecond field
     // NOTE: Perhaps runningsampleindex should be in bytes as well?
 };
