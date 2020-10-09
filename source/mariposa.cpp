@@ -7,19 +7,10 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
     int16* sampleOut = soundBuffer->Samples;
     for(DWORD sampleIndex = 0; sampleIndex < soundBuffer->SampleCount; sampleIndex++)
     {
-        #if 0
-        float sineValue = sinf(gameState->tSine);
-        int16 sampleValue = (int16)(sineValue * toneVolume);
-        #else
         int16 sampleValue = 0;
-        #endif
+        
         *sampleOut++ = sampleValue;
         *sampleOut++ = sampleValue;
-        #if 0
-        gameState->tSine += 2.0f * PI32 * 1.0f / (float)wavePeriod;
-        if(gameState->tSine >= 2.0f * PI32)
-            gameState->tSine -= 2.0f * PI32;
-        #endif
     }
 }
 
