@@ -12,6 +12,7 @@ static void CreateInstance(VulkanData* vkData)
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
+    
     if(vkData->enableValidationLayers)
     {
         createInfo.enabledLayerCount = ArrayCount(vkData->ValidationLayers);
@@ -20,6 +21,7 @@ static void CreateInstance(VulkanData* vkData)
     else
     {
         createInfo.enabledLayerCount = 0;
+        createInfo.pNext = nullptr;
     }
     
     VkResult result = vkCreateInstance(&createInfo, 0, &vkData->Instance);
@@ -44,7 +46,7 @@ static void CreateInstance(VulkanData* vkData)
     }
 }
 
-bool CheckValidationLayerSupport(VulkanData* vkData)
+static bool CheckValidationLayerSupport(VulkanData* vkData)
 {
     uint32 layerCount = 0;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -69,6 +71,95 @@ bool CheckValidationLayerSupport(VulkanData* vkData)
     return layerFound;
 }
 
+static QueueFamilyIndices FindQueueFamilyIndices(VkPhysicalDevice device) {
+    QueueFamilyIndices indices = {};
+    uint32 queueFamiltyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiltyCount, nullptr);
+    VkQueueFamilyProperties queueFamilyProperties[30] = {};
+    MP_ASSERT(queueFamiltyCount < ArrayCount(queueFamilyProperties));
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiltyCount, queueFamilyProperties);
+    
+    int i = 0;
+    for(uint32 k = 0; k < queueFamiltyCount; k++)
+    {
+        if(queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        {
+            indices.GraphicsFamily = i;
+            if(!indices.HasGraphicsFamily)
+                indices.HasGraphicsFamily = true;
+        }
+        
+        if(indices.HasGraphicsFamily)
+        {
+            indices.IsComplete = true;
+            break;
+        }
+        
+        i++;
+    }
+    
+    return indices;
+}
+
+static bool IsDeviceSuitable(VkPhysicalDevice device)
+{
+    // TODO: Implement a better suitability checker that selects the best device given a score
+    QueueFamilyIndices indices = FindQueueFamilyIndices(device);
+    
+    return indices.IsComplete;
+}
+
+static void PickPhysicalDevice(VulkanData* vkData)
+{
+    uint32 deviceCount = 0;
+    vkEnumeratePhysicalDevices(vkData->Instance, &deviceCount, nullptr);
+    if(deviceCount == 0)    // TODO: replace with runtime error
+        OutputDebugStringA("Failed to find GPUs with Vulkan Support");
+    
+    VkPhysicalDevice devices[10] = {};
+    MP_ASSERT(deviceCount <= ArrayCount(devices));
+    vkEnumeratePhysicalDevices(vkData->Instance, &deviceCount, devices);
+    
+    for(uint32 i = 0; i < deviceCount; i++)
+    {
+        if(IsDeviceSuitable(devices[i]))
+        {
+            vkData->PhysicalDevice = devices[i];
+            break;
+        }
+    }
+    
+    if(vkData->PhysicalDevice == VK_NULL_HANDLE)
+        OutputDebugStringA("Failed to find a suitable GPU!");
+}
+
+static void CreateLogicalDevice(VulkanData* vkData)
+{
+    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData->PhysicalDevice);
+    
+    VkDeviceQueueCreateInfo queueCreateInfo{};
+    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queueCreateInfo.queueFamilyIndex = indices.HasGraphicsFamily;
+    queueCreateInfo.queueCount = 1;
+    
+    float queuePriority = 1.0f;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
+    
+    VkPhysicalDeviceFeatures deviceFeatures = {};
+    VkDeviceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
+    createInfo.queueCreateInfoCount = 1;
+    createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.enabledLayerCount = 0;
+    
+    VkResult result = vkCreateDevice(vkData->PhysicalDevice, &createInfo, nullptr, &vkData->Device);
+    if(result != VK_SUCCESS)
+        OutputDebugStringA("Failed to create logical device!");
+    
+    vkGetDeviceQueue(vkData->Device, indices.HasGraphicsFamily, 0, &vkData->GraphicsQueue);
+}
+
 VulkanData* VulkanInit(MP_MEMORY* gameMemory)
 {
     if(gameMemory->IsInitialised)
@@ -89,6 +180,8 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory)
         OutputDebugStringA("Validation layers requested, but not available!\n");
     
     CreateInstance(vkData);
+    PickPhysicalDevice(vkData);
+    CreateLogicalDevice(vkData);
     
     return vkData;
 }
@@ -100,6 +193,7 @@ void VulkanUpdate(void)
 
 void VulkanCleanup(VulkanData* vkData)
 {
+    vkDestroyDevice(vkData->Device, nullptr);
     vkDestroyInstance(vkData->Instance, nullptr);
     OutputDebugStringA("Vulkan cleaned up\n");
 }
