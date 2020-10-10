@@ -1009,7 +1009,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 
                 Win32GameCode game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath, lockFullPath);
                 
-                VulkanData* vkData = VulkanInit(&gameMemory);
+                VulkanData* vkData = VulkanInit(&gameMemory, &instance, &window);
                 
                 uint64 lastCycleCount = __rdtsc();
                 while(GlobalRunning)

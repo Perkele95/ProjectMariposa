@@ -1,4 +1,12 @@
 #include "mp_vulkan.h"
+#include "..\Vulkan\Include\vulkan\vulkan_win32.h"
+
+#define MP_VK_EXT_COUNT 2
+inline static void GetRequiredExtensions(char** extensions)
+{
+    extensions[0] = "VK_KHR_surface";
+    extensions[1] = "VK_KHR_win32_surface";
+}
 
 static void CreateInstance(VulkanData* vkData)
 {
@@ -24,18 +32,19 @@ static void CreateInstance(VulkanData* vkData)
         createInfo.pNext = nullptr;
     }
     
-    VkResult result = vkCreateInstance(&createInfo, 0, &vkData->Instance);
-    MP_ASSERT(result == VK_SUCCESS);
-    OutputDebugStringA("Vulkan instance created\n");
-    
     uint32 extensionsCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionsCount, nullptr);
     
     // TODO: replace with dynamic array
-    VkExtensionProperties extensionProperties[50] = {};
+    VkExtensionProperties extensionProperties[30] = {};
     MP_ASSERT(extensionsCount <= ArrayCount(extensionProperties));
     
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionsCount, extensionProperties);
+    
+    char* extensions[MP_VK_EXT_COUNT] = {};
+    GetRequiredExtensions(extensions);
+    createInfo.enabledExtensionCount = MP_VK_EXT_COUNT;
+    createInfo.ppEnabledExtensionNames = extensions;
     
     OutputDebugStringA("Vulkan extensions:\n");
     for(uint32 i = 0; i < extensionsCount; i++)
@@ -44,6 +53,10 @@ static void CreateInstance(VulkanData* vkData)
         OutputDebugStringA(extensionProperties[i].extensionName);
         OutputDebugStringA("\n");
     }
+            
+    VkResult result = vkCreateInstance(&createInfo, 0, &vkData->Instance);
+    MP_ASSERT(result == VK_SUCCESS);
+    OutputDebugStringA("Vulkan instance created\n");
 }
 
 static bool CheckValidationLayerSupport(VulkanData* vkData)
@@ -71,13 +84,13 @@ static bool CheckValidationLayerSupport(VulkanData* vkData)
     return layerFound;
 }
 
-static QueueFamilyIndices FindQueueFamilyIndices(VkPhysicalDevice device) {
+static QueueFamilyIndices FindQueueFamilyIndices(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice) {
     QueueFamilyIndices indices = {};
     uint32 queueFamiltyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiltyCount, nullptr);
+    vkGetPhysicalDeviceQueueFamilyProperties(*checkedPhysDevice, &queueFamiltyCount, nullptr);
     VkQueueFamilyProperties queueFamilyProperties[30] = {};
     MP_ASSERT(queueFamiltyCount < ArrayCount(queueFamilyProperties));
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamiltyCount, queueFamilyProperties);
+    vkGetPhysicalDeviceQueueFamilyProperties(*checkedPhysDevice, &queueFamiltyCount, queueFamilyProperties);
     
     int i = 0;
     for(uint32 k = 0; k < queueFamiltyCount; k++)
@@ -89,7 +102,16 @@ static QueueFamilyIndices FindQueueFamilyIndices(VkPhysicalDevice device) {
                 indices.HasGraphicsFamily = true;
         }
         
-        if(indices.HasGraphicsFamily)
+        VkBool32 presentSupport = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(*checkedPhysDevice, i, vkData->Surface, &presentSupport);
+        if(presentSupport)
+        {
+            indices.PresentFamily = i;
+            if(!indices.HasPresentFamily)
+                indices.HasPresentFamily = true;
+        }
+        
+        if(indices.HasGraphicsFamily && indices.HasPresentFamily)
         {
             indices.IsComplete = true;
             break;
@@ -101,10 +123,10 @@ static QueueFamilyIndices FindQueueFamilyIndices(VkPhysicalDevice device) {
     return indices;
 }
 
-static bool IsDeviceSuitable(VkPhysicalDevice device)
+static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice)
 {
     // TODO: Implement a better suitability checker that selects the best device given a score
-    QueueFamilyIndices indices = FindQueueFamilyIndices(device);
+    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, checkedPhysDevice);
     
     return indices.IsComplete;
 }
@@ -122,7 +144,7 @@ static void PickPhysicalDevice(VulkanData* vkData)
     
     for(uint32 i = 0; i < deviceCount; i++)
     {
-        if(IsDeviceSuitable(devices[i]))
+        if(IsDeviceSuitable(vkData, &devices[i]))
         {
             vkData->PhysicalDevice = devices[i];
             break;
@@ -135,32 +157,63 @@ static void PickPhysicalDevice(VulkanData* vkData)
 
 static void CreateLogicalDevice(VulkanData* vkData)
 {
-    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData->PhysicalDevice);
+    // TODO: This call has been made before, it could be stored into vkData and passed here for less computation
+    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, &vkData->PhysicalDevice);
     
-    VkDeviceQueueCreateInfo queueCreateInfo{};
-    queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queueCreateInfo.queueFamilyIndex = indices.HasGraphicsFamily;
-    queueCreateInfo.queueCount = 1;
+    VkDeviceQueueCreateInfo queueCreateInfos[2] = {};
+    int uniqueQueueFamilies[2] = {};
+    uniqueQueueFamilies[0] = indices.HasGraphicsFamily;
+    uniqueQueueFamilies[1] = indices.HasPresentFamily;
     
     float queuePriority = 1.0f;
-    queueCreateInfo.pQueuePriorities = &queuePriority;
+    for(int i = 0; i < ArrayCount(uniqueQueueFamilies); i++)
+    {
+        VkDeviceQueueCreateInfo queueCreateInfo = {};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = uniqueQueueFamilies[i];
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+        queueCreateInfos[i] = queueCreateInfo;
+    }
     
     VkPhysicalDeviceFeatures deviceFeatures = {};
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.pQueueCreateInfos = &queueCreateInfo;
-    createInfo.queueCreateInfoCount = 1;
+    createInfo.queueCreateInfoCount = ArrayCount(queueCreateInfos);
+    createInfo.pQueueCreateInfos = queueCreateInfos;
     createInfo.pEnabledFeatures = &deviceFeatures;
-    createInfo.enabledLayerCount = 0;
+    
+    if(vkData->enableValidationLayers)
+    {
+        createInfo.enabledLayerCount = ArrayCount(vkData->ValidationLayers);
+        createInfo.ppEnabledLayerNames = vkData->ValidationLayers;
+    }
+    else
+    {
+        createInfo.enabledLayerCount = 0;
+    }
     
     VkResult result = vkCreateDevice(vkData->PhysicalDevice, &createInfo, nullptr, &vkData->Device);
     if(result != VK_SUCCESS)
         OutputDebugStringA("Failed to create logical device!");
     
     vkGetDeviceQueue(vkData->Device, indices.HasGraphicsFamily, 0, &vkData->GraphicsQueue);
+    vkGetDeviceQueue(vkData->Device, indices.HasPresentFamily, 0, &vkData->PresentQueue);
 }
 
-VulkanData* VulkanInit(MP_MEMORY* gameMemory)
+static void CreateWindowSurface(VulkanData* vkData, HINSTANCE* hInstance, HWND* window)
+{
+    VkWin32SurfaceCreateInfoKHR createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+    createInfo.hwnd = *window;
+    createInfo.hinstance = *hInstance;
+    
+    VkResult result = vkCreateWin32SurfaceKHR(vkData->Instance, &createInfo, nullptr, &vkData->Surface);
+    if(result != VK_SUCCESS)
+        OutputDebugStringA("Failed to create window surface!");
+}
+
+VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window)
 {
     if(gameMemory->IsInitialised)
         gameMemory->IsInitialised = true;
@@ -179,7 +232,9 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory)
     if(vkData->enableValidationLayers && !CheckValidationLayerSupport(vkData))
         OutputDebugStringA("Validation layers requested, but not available!\n");
     
+    // IMPORTANT: Order matters
     CreateInstance(vkData);
+    CreateWindowSurface(vkData, hInstance, window);
     PickPhysicalDevice(vkData);
     CreateLogicalDevice(vkData);
     
@@ -194,6 +249,7 @@ void VulkanUpdate(void)
 void VulkanCleanup(VulkanData* vkData)
 {
     vkDestroyDevice(vkData->Device, nullptr);
+    vkDestroySurfaceKHR(vkData->Instance, vkData->Surface, nullptr);
     vkDestroyInstance(vkData->Instance, nullptr);
     OutputDebugStringA("Vulkan cleaned up\n");
 }
