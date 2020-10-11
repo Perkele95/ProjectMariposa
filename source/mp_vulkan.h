@@ -36,6 +36,7 @@ struct VulkanData
     
     VkRenderPass RenderPass;
     VkPipelineLayout PipelineLayout;
+    VkPipeline GraphicsPipeline;
     
     debug_read_file_result VertexShader;
     debug_read_file_result FragmentShader;
