@@ -30,6 +30,7 @@ struct VulkanData
     
     VkSwapchainKHR SwapChain;
     VkImage SwapChainImages[MP_VK_SWAP_IMAGE_MAX];
+    VkImageView SwapChainImageViews[MP_VK_SWAP_IMAGE_MAX];
     VkFormat SwapChainImageFormat;
     VkExtent2D SwapChainExtent;    
 };

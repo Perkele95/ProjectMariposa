@@ -363,6 +363,34 @@ static void CreateSwapChain(VulkanData* vkData)
     vkData->SwapChainExtent = extent;
 }
 
+static void CreateImageViews(VulkanData* vkData)
+{
+    for(uint32 i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
+    {
+        if(vkData->SwapChainImages[i] == 0)
+            break;
+        
+        VkImageViewCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = vkData->SwapChainImages[i];
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = vkData->SwapChainImageFormat;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+        
+        VkResult result = vkCreateImageView(vkData->Device, &createInfo, nullptr, &vkData->SwapChainImageViews[i]);
+        if(result != VK_SUCCESS)
+            OutputDebugStringA("Failed to create image views!");
+    }
+}
+
 static void CreateWindowSurface(VulkanData* vkData, HINSTANCE* hInstance, HWND* window)
 {
     VkWin32SurfaceCreateInfoKHR createInfo = {};
@@ -394,6 +422,7 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     PickPhysicalDevice(vkData);
     CreateLogicalDevice(vkData);
     CreateSwapChain(vkData);
+    CreateImageViews(vkData);
     
     return vkData;
 }
@@ -405,6 +434,11 @@ void VulkanUpdate(void)
 
 void VulkanCleanup(VulkanData* vkData)
 {
+    for(int i = 0; i < ArrayCount(vkData->SwapChainImageViews); i++)
+    {
+        vkDestroyImageView(vkData->Device, vkData->SwapChainImageViews[i], nullptr);
+    }
+    
     vkDestroySwapchainKHR(vkData->Device, vkData->SwapChain, nullptr);
     vkDestroyDevice(vkData->Device, nullptr);
     vkDestroySurfaceKHR(vkData->Instance, vkData->Surface, nullptr);
