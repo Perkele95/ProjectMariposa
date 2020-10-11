@@ -568,6 +568,30 @@ static void CreateGraphicsPipeline(VulkanData* vkData)
     vkDestroyShaderModule(vkData->Device, fragmentShaderModule, nullptr);
 }
 
+static void CreateFramebuffers(VulkanData* vkData)
+{
+    for(int i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
+    {
+        if(vkData->SwapChainImageViews[i] == 0)
+            break;
+        
+        VkImageView attachments[] = { vkData->SwapChainImageViews[i] };
+        
+        VkFramebufferCreateInfo framebufferInfo = {};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = vkData->RenderPass;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = vkData->SwapChainExtent.width;
+        framebufferInfo.height = vkData->SwapChainExtent.height;
+        framebufferInfo.layers = 1;
+        
+        VkResult result = vkCreateFramebuffer(vkData->Device, &framebufferInfo, nullptr, &vkData->Framebuffers[i]);
+        if(result != VK_SUCCESS)
+            OutputDebugStringA("Failed to create framebuffer!");
+    }
+}
+
 VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
 {
     if(gameMemory->IsInitialised)
@@ -592,6 +616,7 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     CreateImageViews(vkData);
     CreateRenderPass(vkData);
     CreateGraphicsPipeline(vkData);
+    CreateFramebuffers(vkData);
     
     return vkData;
 }
@@ -603,11 +628,17 @@ void VulkanUpdate(void)
 
 void VulkanCleanup(VulkanData* vkData)
 {
+    for(int i = 0; i < MP_VK_SWAP_CHAIN_BUFFER_COUNT; i++)
+    {
+        // TODO: skip emtpy elements perhaps
+        vkDestroyFramebuffer(vkData->Device, vkData->Framebuffers[i], nullptr);
+    }
+    
     vkDestroyPipeline(vkData->Device, vkData->GraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkData->Device, vkData->PipelineLayout, nullptr);
     vkDestroyRenderPass(vkData->Device, vkData->RenderPass, nullptr);
     
-    for(int i = 0; i < ArrayCount(vkData->SwapChainImageViews); i++)
+    for(int i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
     {
         vkDestroyImageView(vkData->Device, vkData->SwapChainImageViews[i], nullptr);
     }
