@@ -21,10 +21,10 @@ static void CreateInstance(VulkanData* vkData)
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
     
-    if(vkData->enableValidationLayers)
+    if(enableValidationLayers)
     {
-        createInfo.enabledLayerCount = ArrayCount(vkData->ValidationLayers);
-        createInfo.ppEnabledLayerNames = vkData->ValidationLayers;
+        createInfo.enabledLayerCount = ArrayCount(validationLayers);
+        createInfo.ppEnabledLayerNames = validationLayers;
     }
     else
     {
@@ -69,11 +69,11 @@ static bool CheckValidationLayerSupport(VulkanData* vkData)
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
     
     bool32 layerFound = false;
-    for(int i = 0; i < ArrayCount(vkData->ValidationLayers); i++)
+    for(int i = 0; i < ArrayCount(validationLayers); i++)
     {
-        for(int k = 0; k < ArrayCount(availableLayers); k++)
+        for(uint32 k = 0; k < layerCount; k++)
         {
-            if(strcmp(vkData->ValidationLayers[i], availableLayers[k].layerName) == 0)
+            if(strcmp(validationLayers[i], availableLayers[k].layerName) == 0)
             {
                 layerFound = true;
                 break;
@@ -92,8 +92,7 @@ static QueueFamilyIndices FindQueueFamilyIndices(VulkanData* vkData, VkPhysicalD
     MP_ASSERT(queueFamiltyCount < ArrayCount(queueFamilyProperties));
     vkGetPhysicalDeviceQueueFamilyProperties(*checkedPhysDevice, &queueFamiltyCount, queueFamilyProperties);
     
-    int i = 0;
-    for(uint32 k = 0; k < queueFamiltyCount; k++)
+    for(uint32 i = 0; i < queueFamiltyCount; i++)
     {
         if(queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
@@ -116,11 +115,62 @@ static QueueFamilyIndices FindQueueFamilyIndices(VulkanData* vkData, VkPhysicalD
             indices.IsComplete = true;
             break;
         }
-        
-        i++;
     }
     
     return indices;
+}
+
+static bool CheckDeviceExtensionSupport(VkPhysicalDevice physDevice)
+{
+    uint32 extensionCount = 0;
+    vkEnumerateDeviceExtensionProperties(physDevice, nullptr, &extensionCount, nullptr);
+    VkExtensionProperties availableExtensions[150] = {};
+    MP_ASSERT(extensionCount <= ArrayCount(availableExtensions));
+    vkEnumerateDeviceExtensionProperties(physDevice, nullptr, &extensionCount, availableExtensions);
+    // TODO: replace the nested for loops with a function, it is similar to those in checkvalidationlayersupport
+    bool32 extensionFound = false;
+    for(int i = 0; i < ArrayCount(deviceExtensions); i++)
+    {
+        for(uint32 k = 0; k < extensionCount; k++)
+        {
+            if(strcmp(deviceExtensions[i], availableExtensions[k].extensionName) == 0)
+            {
+                extensionFound = true;
+                break;
+            }
+        }
+    }
+    
+    return extensionFound;
+}
+
+static SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physDevice, VkSurfaceKHR surface)
+{
+    SwapChainSupportDetails details = {};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDevice, surface, &details.Capabilities);
+    
+    uint32 formatCount = 0;
+    bool32 formatsSet = false;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, surface, &formatCount, nullptr);
+    if(formatCount > 0)
+    {
+        vkGetPhysicalDeviceSurfaceFormatsKHR(physDevice, surface, &formatCount, details.Formats);
+        formatsSet = true;
+    }
+    
+    uint32 presentModeCount = 0;
+    bool32 presentModesSet = false;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, surface, &presentModeCount, nullptr);
+    if(presentModeCount > 0)
+    {
+        vkGetPhysicalDeviceSurfacePresentModesKHR(physDevice, surface, &presentModeCount, details.PresentModes);
+        presentModesSet = true;
+    }
+    
+    if(formatsSet && presentModesSet)
+        details.IsAdequate = true;
+    
+    return details;
 }
 
 static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice)
@@ -128,7 +178,15 @@ static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDe
     // TODO: Implement a better suitability checker that selects the best device given a score
     QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, checkedPhysDevice);
     
-    return indices.IsComplete;
+    bool extensionsSupported = CheckDeviceExtensionSupport(*checkedPhysDevice);
+    bool swapChainAdequate = false;
+    if(extensionsSupported)
+    {
+        SwapChainSupportDetails swapChainDetails = QuerySwapChainSupport(*checkedPhysDevice, vkData->Surface);
+        swapChainAdequate = swapChainDetails.IsAdequate;
+    }
+    
+    return indices.IsComplete && extensionsSupported && swapChainAdequate;
 }
 
 static void PickPhysicalDevice(VulkanData* vkData)
@@ -161,16 +219,14 @@ static void CreateLogicalDevice(VulkanData* vkData)
     QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, &vkData->PhysicalDevice);
     
     VkDeviceQueueCreateInfo queueCreateInfos[2] = {};
-    int uniqueQueueFamilies[2] = {};
-    uniqueQueueFamilies[0] = indices.HasGraphicsFamily;
-    uniqueQueueFamilies[1] = indices.HasPresentFamily;
+    uint32 uniqueQueueFamilies[] = { indices.GraphicsFamily, indices.PresentFamily };
     
     float queuePriority = 1.0f;
-    for(int i = 0; i < ArrayCount(uniqueQueueFamilies); i++)
+    for(uint32 i = 0; i < ArrayCount(uniqueQueueFamilies); i++)
     {
         VkDeviceQueueCreateInfo queueCreateInfo = {};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = uniqueQueueFamilies[i];
+        queueCreateInfo.queueFamilyIndex = i;//uniqueQueueFamilies[i];
         queueCreateInfo.queueCount = 1;
         queueCreateInfo.pQueuePriorities = &queuePriority;
         queueCreateInfos[i] = queueCreateInfo;
@@ -182,11 +238,13 @@ static void CreateLogicalDevice(VulkanData* vkData)
     createInfo.queueCreateInfoCount = ArrayCount(queueCreateInfos);
     createInfo.pQueueCreateInfos = queueCreateInfos;
     createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.enabledExtensionCount = ArrayCount(deviceExtensions);
+    createInfo.ppEnabledExtensionNames = deviceExtensions;
     
-    if(vkData->enableValidationLayers)
+    if(enableValidationLayers)
     {
-        createInfo.enabledLayerCount = ArrayCount(vkData->ValidationLayers);
-        createInfo.ppEnabledLayerNames = vkData->ValidationLayers;
+        createInfo.enabledLayerCount = ArrayCount(validationLayers);
+        createInfo.ppEnabledLayerNames = validationLayers;
     }
     else
     {
@@ -199,6 +257,110 @@ static void CreateLogicalDevice(VulkanData* vkData)
     
     vkGetDeviceQueue(vkData->Device, indices.HasGraphicsFamily, 0, &vkData->GraphicsQueue);
     vkGetDeviceQueue(vkData->Device, indices.HasPresentFamily, 0, &vkData->PresentQueue);
+}
+
+VkSurfaceFormatKHR ChooseSwapSurfaceFormat(VkSurfaceFormatKHR availableFormats[])
+{
+    for(int i = 0; i < ArrayCount(availableFormats); i++)
+    {
+        if(availableFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB && availableFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            return availableFormats[i];
+    }
+    
+    return availableFormats[0];
+}
+
+VkPresentModeKHR ChooseSwapPresentMode(VkPresentModeKHR availablePresentModes[])
+{
+    /* NOTE:
+        VK_PRESENT_MODE_IMMEDIATE_KHR   == Vsync OFF
+        VK_PRESENT_MODE_FIFO_KHR        == Vsync ON, double buffering
+        VK_PRESENT_MODE_MAILBOX_KHR     == Vsync ON, triple buffering
+    */
+    for(int i = 0; i < ArrayCount(availablePresentModes); i++)
+    {
+        if(availablePresentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
+            return availablePresentModes[i];
+    }
+    
+    return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)
+{
+    if(capabilities.currentExtent.width != 0xFFFFFFFF)
+    {
+        return capabilities.currentExtent;
+    }
+    else
+    {
+        VkExtent2D actualExtent = { MP_SCREEN_WIDTH, MP_SCREEN_HEIGHT };
+        
+        
+        actualExtent.width = Uint32Clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        actualExtent.height = Uint32Clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+        
+        return actualExtent;
+    }
+}
+
+static void CreateSwapChain(VulkanData* vkData)
+{
+    SwapChainSupportDetails swapChainDetails = QuerySwapChainSupport(vkData->PhysicalDevice, vkData->Surface);
+    
+    VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainDetails.Formats);
+    VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainDetails.PresentModes);
+    VkExtent2D extent = ChooseSwapExtent(swapChainDetails.Capabilities);
+    
+    uint32 imageCount = swapChainDetails.Capabilities.minImageCount + 1;
+    if(swapChainDetails.Capabilities.maxImageCount > 0 && imageCount > swapChainDetails.Capabilities.maxImageCount)
+    {
+        imageCount = swapChainDetails.Capabilities.maxImageCount;
+    }
+    
+    VkSwapchainCreateInfoKHR createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    createInfo.surface = vkData->Surface;
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    
+    // TODO: Cache this value instead of calling it 3 bloody times
+    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, &vkData->PhysicalDevice);
+    uint32 queueFamilyIndices[] = { indices.GraphicsFamily, indices.PresentFamily };
+    
+    if(indices.GraphicsFamily != indices.PresentFamily)
+    {
+        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        createInfo.queueFamilyIndexCount = 2;
+        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+    }
+    else
+    {
+        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.queueFamilyIndexCount = 0;
+        createInfo.pQueueFamilyIndices = nullptr;
+    }
+    
+    createInfo.preTransform = swapChainDetails.Capabilities.currentTransform;
+    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE;
+    createInfo.oldSwapchain = VK_NULL_HANDLE;
+    
+    VkResult result = vkCreateSwapchainKHR(vkData->Device, &createInfo, nullptr, &vkData->SwapChain);
+    if(result != VK_SUCCESS)
+        OutputDebugStringA("Failed to create swap chain!");
+    
+    MP_ASSERT(imageCount <= ArrayCount(vkData->SwapChainImages));
+    vkGetSwapchainImagesKHR(vkData->Device, vkData->SwapChain, &imageCount, nullptr);
+    vkGetSwapchainImagesKHR(vkData->Device, vkData->SwapChain, &imageCount, vkData->SwapChainImages);
+    
+    vkData->SwapChainImageFormat = surfaceFormat.format;
+    vkData->SwapChainExtent = extent;
 }
 
 static void CreateWindowSurface(VulkanData* vkData, HINSTANCE* hInstance, HWND* window)
@@ -221,15 +383,9 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     VulkanData* vkData = (VulkanData*)gameMemory->PermanentStorage;
     gameMemory->PermanentStorage = (VulkanData*)gameMemory->PermanentStorage + 1;
     
-    vkData->ValidationLayers[0] = {"VK_LAYER_KHRONOS_validation"};
-    #if MP_INTERNAL
-    vkData->enableValidationLayers = true;
-    #else
-    vkData->enableValidationLayers = false;
-    #endif
     OutputDebugStringA("Vulkan Data initialised\n");
     
-    if(vkData->enableValidationLayers && !CheckValidationLayerSupport(vkData))
+    if(enableValidationLayers && !CheckValidationLayerSupport(vkData))
         OutputDebugStringA("Validation layers requested, but not available!\n");
     
     // IMPORTANT: Order matters
@@ -237,6 +393,7 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     CreateWindowSurface(vkData, hInstance, window);
     PickPhysicalDevice(vkData);
     CreateLogicalDevice(vkData);
+    CreateSwapChain(vkData);
     
     return vkData;
 }
@@ -248,6 +405,7 @@ void VulkanUpdate(void)
 
 void VulkanCleanup(VulkanData* vkData)
 {
+    vkDestroySwapchainKHR(vkData->Device, vkData->SwapChain, nullptr);
     vkDestroyDevice(vkData->Device, nullptr);
     vkDestroySurfaceKHR(vkData->Instance, vkData->Surface, nullptr);
     vkDestroyInstance(vkData->Instance, nullptr);

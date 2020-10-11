@@ -30,6 +30,9 @@ typedef int int32;
 typedef long long int64;
 typedef int32 bool32;
 
+#define MP_SCREEN_WIDTH 1280
+#define MP_SCREEN_HEIGHT 720
+
 #if MP_PERFORMANCE
     #define MP_ASSERT(Expression)
 #else
