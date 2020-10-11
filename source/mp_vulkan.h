@@ -34,6 +34,8 @@ struct VulkanData
     VkFormat SwapChainImageFormat;
     VkExtent2D SwapChainExtent;
     
+    VkPipelineLayout PipelineLayout;
+    
     debug_read_file_result VertexShader;
     debug_read_file_result FragmentShader;
 };
