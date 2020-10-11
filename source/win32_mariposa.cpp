@@ -1007,9 +1007,17 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 DWORD audioLatencyBytes = 0;
                 float audioLatencySeconds = 0;
                 
+                MP_THREAD_CONTEXT thread = {};
                 Win32GameCode game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath, lockFullPath);
                 
-                VulkanData* vkData = VulkanInit(&gameMemory, &instance, &window);
+                VulkanData* vkData;
+                {
+                    debug_read_file_result vertShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/vert.spv");
+                    debug_read_file_result fragShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/frag.spv");
+                    vkData = VulkanInit(&gameMemory, &instance, &window, &vertShader, &fragShader);
+                    DEBUGPlatformFreeFileMemory(&thread, vertShader.data);
+                    DEBUGPlatformFreeFileMemory(&thread, fragShader.data);
+                }
                 
                 uint64 lastCycleCount = __rdtsc();
                 while(GlobalRunning)
@@ -1111,8 +1119,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                             newController->IsConntected = true;
                         }
                     }
-                    MP_THREAD_CONTEXT thread = {};
-                    
+                                        
                     MP_OFFSCREENBUFFER buffer = {};
                     buffer.Memory = GlobalBackbuffer.Memory;
                     buffer.Width = GlobalBackbuffer.Width;
@@ -1329,6 +1336,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 }
                 
                 VulkanCleanup(vkData);
+                DEBUGPlatformFreeFileMemory(&thread, vkData->VertexShader.data);
+                DEBUGPlatformFreeFileMemory(&thread, vkData->FragmentShader.data);
             }
             else
             {

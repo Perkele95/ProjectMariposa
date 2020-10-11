@@ -403,15 +403,55 @@ static void CreateWindowSurface(VulkanData* vkData, HINSTANCE* hInstance, HWND* 
         OutputDebugStringA("Failed to create window surface!");
 }
 
-VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window)
+static VkShaderModule CreateShaderModule(VkDevice* device, debug_read_file_result* file)
+{
+    VkShaderModuleCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = file->dataSize;
+    createInfo.pCode = (const uint32*)file->data;
+    
+    VkShaderModule shaderModule;
+    VkResult result = vkCreateShaderModule(*device, &createInfo, nullptr, &shaderModule);
+    if(result != VK_SUCCESS)
+        OutputDebugStringA("Failed to create shader module!");
+    
+    return shaderModule;
+}
+
+static void CreateGraphicsPipeline(VulkanData* vkData)
+{
+    VkShaderModule vertexShaderModule = CreateShaderModule(&vkData->Device, &vkData->VertexShader);
+    VkShaderModule fragmentShaderModule = CreateShaderModule(&vkData->Device, &vkData->FragmentShader);
+    
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertexShaderModule;
+    vertShaderStageInfo.pName = "main";
+    
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo = {};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragmentShaderModule;
+    fragShaderStageInfo.pName = "main";
+    
+    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+    
+    vkDestroyShaderModule(vkData->Device, vertexShaderModule, nullptr);
+    vkDestroyShaderModule(vkData->Device, fragmentShaderModule, nullptr);
+}
+
+VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
 {
     if(gameMemory->IsInitialised)
         gameMemory->IsInitialised = true;
         
     VulkanData* vkData = (VulkanData*)gameMemory->PermanentStorage;
     gameMemory->PermanentStorage = (VulkanData*)gameMemory->PermanentStorage + 1;
-    
     OutputDebugStringA("Vulkan Data initialised\n");
+    
+    vkData->VertexShader = *vertShader;
+    vkData->FragmentShader = *fragShader;
     
     if(enableValidationLayers && !CheckValidationLayerSupport(vkData))
         OutputDebugStringA("Validation layers requested, but not available!\n");
@@ -423,6 +463,7 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     CreateLogicalDevice(vkData);
     CreateSwapChain(vkData);
     CreateImageViews(vkData);
+    CreateGraphicsPipeline(vkData);
     
     return vkData;
 }
