@@ -15,6 +15,7 @@ static void CreateInstance(VulkanData* vkData)
     appInfo.pApplicationName = "Mariposa";
     appInfo.pEngineName = "Mariposa";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_0;
     
     VkInstanceCreateInfo createInfo = {};
@@ -226,7 +227,7 @@ static void CreateLogicalDevice(VulkanData* vkData)
     {
         VkDeviceQueueCreateInfo queueCreateInfo = {};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = i;//uniqueQueueFamilies[i];
+        queueCreateInfo.queueFamilyIndex = uniqueQueueFamilies[i];
         queueCreateInfo.queueCount = 1;
         queueCreateInfo.pQueuePriorities = &queuePriority;
         queueCreateInfos[i] = queueCreateInfo;
@@ -255,8 +256,8 @@ static void CreateLogicalDevice(VulkanData* vkData)
     if(result != VK_SUCCESS)
         OutputDebugStringA("Failed to create logical device!");
     
-    vkGetDeviceQueue(vkData->Device, indices.HasGraphicsFamily, 0, &vkData->GraphicsQueue);
-    vkGetDeviceQueue(vkData->Device, indices.HasPresentFamily, 0, &vkData->PresentQueue);
+    vkGetDeviceQueue(vkData->Device, indices.GraphicsFamily, 0, &vkData->GraphicsQueue);
+    vkGetDeviceQueue(vkData->Device, indices.PresentFamily, 0, &vkData->PresentQueue);
 }
 
 VkSurfaceFormatKHR ChooseSwapSurfaceFormat(VkSurfaceFormatKHR availableFormats[])
@@ -439,12 +440,22 @@ static void CreateRenderPass(VulkanData* vkData)
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
     
+    VkSubpassDependency dependency = {};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    
     VkRenderPassCreateInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount = 1;
     renderPassInfo.pAttachments = &colorAttachment;
     renderPassInfo.subpassCount = 1;
     renderPassInfo.pSubpasses = &subpass;
+    renderPassInfo.dependencyCount = 1;
+    renderPassInfo.pDependencies = &dependency;
     
     VkResult result = vkCreateRenderPass(vkData->Device, &renderPassInfo, nullptr, &vkData->RenderPass);
     if(result != VK_SUCCESS)
@@ -589,7 +600,77 @@ static void CreateFramebuffers(VulkanData* vkData)
         VkResult result = vkCreateFramebuffer(vkData->Device, &framebufferInfo, nullptr, &vkData->Framebuffers[i]);
         if(result != VK_SUCCESS)
             OutputDebugStringA("Failed to create framebuffer!");
+        
+        vkData->FrameBufferCount++;
     }
+}
+
+static void CreateCommandPool(VulkanData* vkData)
+{
+    QueueFamilyIndices queueFamilyIndices = FindQueueFamilyIndices(vkData, &vkData->PhysicalDevice);
+    
+    VkCommandPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.queueFamilyIndex = queueFamilyIndices.GraphicsFamily;
+    
+    VkResult result = vkCreateCommandPool(vkData->Device, &poolInfo, nullptr, &vkData->CommandPool);
+    if(result != VK_SUCCESS)
+        OutputDebugStringA("Failed to create command pool!");
+}
+
+static void CreateCommandBuffers(VulkanData* vkData)
+{
+    VkCommandBufferAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = vkData->CommandPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = vkData->FrameBufferCount;
+    
+    VkResult allocateResult = vkAllocateCommandBuffers(vkData->Device, &allocInfo, vkData->Commandbuffers);
+    if(allocateResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to allocate command buffers!");
+    
+    for(uint32 i = 0; i < vkData->FrameBufferCount; i++)
+    {
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+        
+        VkResult beginResult = vkBeginCommandBuffer(vkData->Commandbuffers[i], &beginInfo);
+        if(beginResult != VK_SUCCESS)
+            OutputDebugStringA("Failed to begin recording command buffer!");
+        
+        VkRenderPassBeginInfo renderPassInfo = {};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = vkData->RenderPass;
+        renderPassInfo.framebuffer = vkData->Framebuffers[i];
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = vkData->SwapChainExtent;
+        
+        VkClearValue clearColor = { 0.0f, 0.1f, 0.2f, 1.0f };
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearColor;
+        
+        vkCmdBeginRenderPass(vkData->Commandbuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(vkData->Commandbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vkData->GraphicsPipeline);
+        vkCmdDraw(vkData->Commandbuffers[i], 3, 1, 0, 0);
+        vkCmdEndRenderPass(vkData->Commandbuffers[i]);
+        
+        VkResult endCmdResult = vkEndCommandBuffer(vkData->Commandbuffers[i]);
+        if(endCmdResult != VK_SUCCESS)
+            OutputDebugStringA("Failed to end command buffer recording!");
+    }
+}
+
+static void CreateSemaphores(VulkanData* vkData)
+{
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    
+    VkResult semaphoreResult1 = vkCreateSemaphore(vkData->Device, &semaphoreInfo, nullptr, &vkData->ImageAvailableSemaphore);
+    VkResult semaphoreResult2 = vkCreateSemaphore(vkData->Device, &semaphoreInfo, nullptr, &vkData->RenderFinishedSemaphore);
+    if(semaphoreResult1 != VK_SUCCESS || semaphoreResult2 != VK_SUCCESS)
+            OutputDebugStringA("Failed to create semaphores!");
 }
 
 VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
@@ -617,17 +698,64 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     CreateRenderPass(vkData);
     CreateGraphicsPipeline(vkData);
     CreateFramebuffers(vkData);
+    CreateCommandPool(vkData);
+    CreateCommandBuffers(vkData);
+    CreateSemaphores(vkData);
     
     return vkData;
 }
 
-void VulkanUpdate(void)
+static void DrawFrame(VulkanData* vkData)
 {
+    uint32 imageIndex = 0;
+    vkAcquireNextImageKHR(vkData->Device, vkData->SwapChain, UINT64MAX, vkData->ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
     
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    
+    VkSemaphore waitSemaphores[] = { vkData->ImageAvailableSemaphore };
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitStages;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &vkData->Commandbuffers[imageIndex];
+    
+    VkSemaphore signalSemaphores[] = { vkData->RenderFinishedSemaphore };
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+    
+    VkResult submitResult = vkQueueSubmit(vkData->GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    if(submitResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to submit draw command buffer!");
+    
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+    
+    VkSwapchainKHR swapChains[] = { vkData->SwapChain };
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    
+    vkQueuePresentKHR(vkData->PresentQueue, &presentInfo);
+}
+
+void VulkanUpdate(VulkanData* vkData)
+{
+    DrawFrame(vkData);
 }
 
 void VulkanCleanup(VulkanData* vkData)
 {
+    vkDeviceWaitIdle(vkData->Device);
+    
+    vkDestroySemaphore(vkData->Device, vkData->ImageAvailableSemaphore, nullptr);
+    vkDestroySemaphore(vkData->Device, vkData->RenderFinishedSemaphore, nullptr);
+    
+    vkDestroyCommandPool(vkData->Device, vkData->CommandPool, nullptr);
+    
     for(int i = 0; i < MP_VK_SWAP_CHAIN_BUFFER_COUNT; i++)
     {
         // TODO: skip emtpy elements perhaps

@@ -18,6 +18,8 @@
 #define internal static
 #define local_persist static
 #define global_variable static
+
+#define UINT64MAX 0xFFFFFFFFFFFFFFFF
 #define PI32 3.14159265359f
 
 typedef unsigned char uint8;

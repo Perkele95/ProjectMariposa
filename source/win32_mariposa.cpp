@@ -305,7 +305,7 @@ internal Win32WindowDimensions Win32GetWindowDimensions(HWND window)
     
     return result;
 }
-
+/*
 internal void Win32ResizeDIBSection(win32OffscreenBuffer* buffer, int width, int height)    // Device independent bitmap
 {
     if(buffer->Memory)
@@ -339,7 +339,7 @@ internal void Win32CopyBufferToWindow(HDC deviceContext, win32OffscreenBuffer* b
                                  &buffer->Info,
                                  DIB_RGB_COLORS, SRCCOPY);
 }
-
+*/
 LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = 0;
@@ -377,17 +377,6 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
         case WM_KEYUP:
         {
             MP_ASSERT(!"Keyboard input came in through a non-dispatch message!");
-        } break;
-
-        case WM_PAINT:
-        {
-            PAINTSTRUCT paint;
-            HDC deviceContext = BeginPaint(window, &paint);
-            
-            Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
-            
-            Win32CopyBufferToWindow(deviceContext, &GlobalBackbuffer, dimensions.width, dimensions.height);
-            EndPaint(window, &paint);
         } break;
 
         default:
@@ -907,8 +896,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
     
     WNDCLASSA windowClass = {};
     
-    Win32ResizeDIBSection(&GlobalBackbuffer, MP_SCREEN_WIDTH, MP_SCREEN_HEIGHT);
-
+    //Win32ResizeDIBSection(&GlobalBackbuffer, MP_SCREEN_WIDTH, MP_SCREEN_HEIGHT);
+    
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc = Win32MainWindowCallback;
     windowClass.hInstance = instance;
@@ -1141,6 +1130,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         game.UpdateAndRender(&thread, &gameMemory, newInput, &buffer, msDeltaTime);
                     }
                     
+                    VulkanUpdate(vkData);
+                    
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
                     
@@ -1287,11 +1278,11 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     Win32DebugSyncDisplay(&GlobalBackbuffer, ArrayCount(debugTimeMarkers), debugTimeMarkers,
                                             (debugTimeMarkerIndex - 1), &soundOutput, expectedDeltaTime);
                     #endif
-                    
+                    /* TODO: Remove
                     HDC deviceContext = GetDC(window);
                     Win32CopyBufferToWindow(deviceContext, &GlobalBackbuffer, dimensions.width, dimensions.height);
                     ReleaseDC(window, deviceContext);
-                    
+                    */
                     flipClock = Win32GetClockValue();
                     
                     // TODO: This is replaced by better tools when we can render stuff with Vulkan

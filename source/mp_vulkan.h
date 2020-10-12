@@ -40,6 +40,12 @@ struct VulkanData
     VkPipeline GraphicsPipeline;
     
     VkFramebuffer Framebuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
+    uint32 FrameBufferCount;
+    
+    VkCommandPool CommandPool;
+    VkCommandBuffer Commandbuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
+    VkSemaphore ImageAvailableSemaphore;
+    VkSemaphore RenderFinishedSemaphore;
     
     debug_read_file_result VertexShader;
     debug_read_file_result FragmentShader;
