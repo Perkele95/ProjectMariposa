@@ -3,11 +3,13 @@
 #include "..\Vulkan\Include\vulkan\vulkan.h"
 
 #include "mariposa_core.h"
+#include <stdint.h>
 
-#define MP_VK_FORMAT_MAX 10
-#define MP_VK_PRESENTMODE_MAX 10
-#define MP_VK_SWAP_IMAGE_MAX 10
-#define MP_VK_SWAP_CHAIN_BUFFER_COUNT 10
+const uint32 MP_VK_FORMAT_MAX = 10;
+const uint32 MP_VK_PRESENTMODE_MAX = 10;
+const uint32 MP_VK_SWAP_IMAGE_MAX = 10;
+const uint32 MP_VK_SWAP_CHAIN_BUFFER_COUNT = 10;
+const uint32 MP_VK_FRAMES_IN_FLIGHT_MAX = 2;
 
 const char* validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 const char* deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
@@ -41,11 +43,17 @@ struct VulkanData
     
     VkFramebuffer Framebuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
     uint32 FrameBufferCount;
+    uint32 currentFrame;
     
     VkCommandPool CommandPool;
     VkCommandBuffer Commandbuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
+    
     VkSemaphore ImageAvailableSemaphore;
     VkSemaphore RenderFinishedSemaphore;
+    VkSemaphore ImageAvailableSemaphores[MP_VK_FRAMES_IN_FLIGHT_MAX];
+    VkSemaphore RenderFinishedSemaphores[MP_VK_FRAMES_IN_FLIGHT_MAX];
+    VkFence InFlightFences[MP_VK_FRAMES_IN_FLIGHT_MAX];
+    VkFence InFlightImages[MP_VK_SWAP_IMAGE_MAX];
     
     debug_read_file_result VertexShader;
     debug_read_file_result FragmentShader;

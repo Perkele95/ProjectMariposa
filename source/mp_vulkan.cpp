@@ -662,15 +662,23 @@ static void CreateCommandBuffers(VulkanData* vkData)
     }
 }
 
-static void CreateSemaphores(VulkanData* vkData)
+static void CreateSyncObjects(VulkanData* vkData)
 {
-    VkSemaphoreCreateInfo semaphoreInfo{};
+    VkSemaphoreCreateInfo semaphoreInfo = {};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
     
-    VkResult semaphoreResult1 = vkCreateSemaphore(vkData->Device, &semaphoreInfo, nullptr, &vkData->ImageAvailableSemaphore);
-    VkResult semaphoreResult2 = vkCreateSemaphore(vkData->Device, &semaphoreInfo, nullptr, &vkData->RenderFinishedSemaphore);
-    if(semaphoreResult1 != VK_SUCCESS || semaphoreResult2 != VK_SUCCESS)
-            OutputDebugStringA("Failed to create semaphores!");
+    VkFenceCreateInfo fenceInfo = {};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+    
+    for(uint32 i = 0; i < MP_VK_FRAMES_IN_FLIGHT_MAX; i++)
+    {
+        VkResult semaphoreResult1 = vkCreateSemaphore(vkData->Device, &semaphoreInfo, nullptr, &vkData->ImageAvailableSemaphores[i]);
+        VkResult semaphoreResult2 = vkCreateSemaphore(vkData->Device, &semaphoreInfo, nullptr, &vkData->RenderFinishedSemaphores[i]);
+        VkResult frenceResult = vkCreateFence(vkData->Device, &fenceInfo, nullptr, &vkData->InFlightFences[i]);
+        if(semaphoreResult1 != VK_SUCCESS || semaphoreResult2 != VK_SUCCESS)
+                OutputDebugStringA("Failed to create synchronization objects for a frame!");
+    }
 }
 
 VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
@@ -700,20 +708,28 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     CreateFramebuffers(vkData);
     CreateCommandPool(vkData);
     CreateCommandBuffers(vkData);
-    CreateSemaphores(vkData);
+    CreateSyncObjects(vkData);
     
     return vkData;
 }
 
 static void DrawFrame(VulkanData* vkData)
 {
+    vkWaitForFences(vkData->Device, 1, &vkData->InFlightFences[vkData->currentFrame], VK_TRUE, UINT64MAX);
+    
     uint32 imageIndex = 0;
-    vkAcquireNextImageKHR(vkData->Device, vkData->SwapChain, UINT64MAX, vkData->ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    vkAcquireNextImageKHR(vkData->Device, vkData->SwapChain, UINT64MAX, vkData->ImageAvailableSemaphores[vkData->currentFrame], VK_NULL_HANDLE, &imageIndex);
+    
+    if(vkData->InFlightImages[imageIndex] != VK_NULL_HANDLE)
+    {
+        vkWaitForFences(vkData->Device, 1, &vkData->InFlightImages[imageIndex], VK_TRUE, UINT64MAX);
+    }
+    vkData->InFlightImages[imageIndex] = vkData->InFlightFences[vkData->currentFrame];
     
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     
-    VkSemaphore waitSemaphores[] = { vkData->ImageAvailableSemaphore };
+    VkSemaphore waitSemaphores[] = { vkData->ImageAvailableSemaphores[vkData->currentFrame] };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
@@ -721,11 +737,13 @@ static void DrawFrame(VulkanData* vkData)
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &vkData->Commandbuffers[imageIndex];
     
-    VkSemaphore signalSemaphores[] = { vkData->RenderFinishedSemaphore };
+    VkSemaphore signalSemaphores[] = { vkData->RenderFinishedSemaphores[vkData->currentFrame] };
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
     
-    VkResult submitResult = vkQueueSubmit(vkData->GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkResetFences(vkData->Device, 1, &vkData->InFlightFences[vkData->currentFrame]);
+    
+    VkResult submitResult = vkQueueSubmit(vkData->GraphicsQueue, 1, &submitInfo, vkData->InFlightFences[vkData->currentFrame]);
     if(submitResult != VK_SUCCESS)
         OutputDebugStringA("Failed to submit draw command buffer!");
     
@@ -740,6 +758,9 @@ static void DrawFrame(VulkanData* vkData)
     presentInfo.pImageIndices = &imageIndex;
     
     vkQueuePresentKHR(vkData->PresentQueue, &presentInfo);
+    vkQueueWaitIdle(vkData->PresentQueue);
+    
+    vkData->currentFrame = (vkData->currentFrame + 1) % MP_VK_FRAMES_IN_FLIGHT_MAX;
 }
 
 void VulkanUpdate(VulkanData* vkData)
@@ -751,8 +772,12 @@ void VulkanCleanup(VulkanData* vkData)
 {
     vkDeviceWaitIdle(vkData->Device);
     
-    vkDestroySemaphore(vkData->Device, vkData->ImageAvailableSemaphore, nullptr);
-    vkDestroySemaphore(vkData->Device, vkData->RenderFinishedSemaphore, nullptr);
+    for(uint32 i = 0; i < MP_VK_FRAMES_IN_FLIGHT_MAX; i++)
+    {
+        vkDestroySemaphore(vkData->Device, vkData->ImageAvailableSemaphores[i], nullptr);
+        vkDestroySemaphore(vkData->Device, vkData->RenderFinishedSemaphores[i], nullptr);
+        vkDestroyFence(vkData->Device, vkData->InFlightFences[i], nullptr);
+    }
     
     vkDestroyCommandPool(vkData->Device, vkData->CommandPool, nullptr);
     
