@@ -305,41 +305,7 @@ internal Win32WindowDimensions Win32GetWindowDimensions(HWND window)
     
     return result;
 }
-/*
-internal void Win32ResizeDIBSection(win32OffscreenBuffer* buffer, int width, int height)    // Device independent bitmap
-{
-    if(buffer->Memory)
-    {
-        VirtualFree(buffer->Memory, 0, MEM_RELEASE);
-    }
-    
-    buffer->Width = width;
-    buffer->Height = height;
-    int bytesPerPixel = 4;
-    buffer->bytesPerPixel = bytesPerPixel;
-    
-    buffer->Info.bmiHeader.biSize = sizeof(buffer->Info.bmiHeader);
-    buffer->Info.bmiHeader.biWidth = buffer->Width;
-    buffer->Info.bmiHeader.biHeight = -buffer->Height;
-    buffer->Info.bmiHeader.biPlanes = 1;
-    buffer->Info.bmiHeader.biBitCount = 32;
-    buffer->Info.bmiHeader.biCompression = BI_RGB;
-    
-    int bitMapMemorySize = (buffer->Width * buffer->Height) * bytesPerPixel;
-    buffer->Memory = VirtualAlloc(0, bitMapMemorySize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    
-    buffer->Pitch = width * bytesPerPixel;
-}
 
-internal void Win32CopyBufferToWindow(HDC deviceContext, win32OffscreenBuffer* buffer, int windowWidth, int windowHeight)
-{
-    StretchDIBits(deviceContext, 0, 0, windowWidth, windowHeight,
-                                 0, 0, buffer->Width, buffer->Height,
-                                 buffer->Memory,
-                                 &buffer->Info,
-                                 DIB_RGB_COLORS, SRCCOPY);
-}
-*/
 LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = 0;
@@ -362,13 +328,7 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
         
         case WM_ACTIVATEAPP:
         {
-            // TODO: Remove if this feature is unecessary
-            #if 0
-            if(wParam)
-                SetLayeredWindowAttributes(window, 0xFFFFFF, 0x9F, LWA_COLORKEY);
-            else
-                SetLayeredWindowAttributes(window, 0xFFFFFF, 0x9F, LWA_ALPHA);
-            #endif
+            
         } break;
         
         case WM_SYSKEYDOWN:
@@ -791,7 +751,7 @@ inline internal float Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER 
     float result = (float)(end.QuadPart - start.QuadPart) / (float)GlobalPerfCountFrequency;
     return result;
 }
-
+#if 0   // TODO: REMOVE
 internal void Win32DebugDrawVertical(win32OffscreenBuffer* backBuffer, int x, int top, int bottom, uint32 colour)
 {
     if(top <= 0)
@@ -819,7 +779,6 @@ inline internal void Win32DrawSoundbufferMarker(win32OffscreenBuffer* backBuffer
 }
 
 // TODO: Remove/replace this when we have a good ol renderer
-#if 0
 internal void Win32DebugSyncDisplay(win32OffscreenBuffer* backBuffer, int markerCount,
                         Win32DebugTimeMarker* markers, int currentMarkerIndex,  Win32SoundOutput* soundBuffer, float expectedDeltaTime)
 {
@@ -895,9 +854,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
     Win32LoadXInput();
     
     WNDCLASSA windowClass = {};
-    
-    //Win32ResizeDIBSection(&GlobalBackbuffer, MP_SCREEN_WIDTH, MP_SCREEN_HEIGHT);
-    
+        
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc = Win32MainWindowCallback;
     windowClass.hInstance = instance;
@@ -927,7 +884,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             soundOutput.SamplesPerSecond = 48000;
             soundOutput.BytesPerSample = 2 * sizeof(int16);
             soundOutput.SecondaryBufferSize = soundOutput.SamplesPerSecond * soundOutput.BytesPerSample;
-            // TODO: remove LatencySampleCount
             soundOutput.SafetyBytes = (DWORD)((float)soundOutput.SamplesPerSecond * (float)soundOutput.BytesPerSample / (3.0f * gameRefreshRate));
             
             Win32InitDirectSound(window, soundOutput.SamplesPerSecond, soundOutput.SecondaryBufferSize);
@@ -1235,57 +1191,17 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     {
                         soundIsValid = false;
                     }
-                    // TODO: This becomes deprecated when we can enforce vSync with Vulkan
-                    #if 0
-                    LARGE_INTEGER workCounter = Win32GetClockValue();
-                    float workSecondsElapsed = Win32GetSecondsElapsed(lastCounter, workCounter);
-                    
-                    float secondsElapsedForFrame = workSecondsElapsed;
-                    if(secondsElapsedForFrame < expectedDeltaTime)
-                    {
-                        if(sleepIsGranular)
-                        {
-                            DWORD sleepMS = (DWORD)(1000.0f * (expectedDeltaTime - secondsElapsedForFrame));
-                            if(sleepMS > 0)
-                                Sleep(sleepMS);
-                        }
-                        
-                        float testSecondsElapsedForFrame = Win32GetSecondsElapsed(lastCounter, Win32GetClockValue());
-                        if(testSecondsElapsedForFrame < expectedDeltaTime)
-                        {
-                            // TODO: Log missed sleep
-                        }
-                        
-                        while(secondsElapsedForFrame < expectedDeltaTime)
-                        {
-                            secondsElapsedForFrame = Win32GetSecondsElapsed(lastCounter, Win32GetClockValue());
-                        }
-                    }
-                    else
-                    {
-                        // Log: Missed frame!
-                    }
-                    #endif
+                    // TODO: Add Vsync toggle and a Vsync wait here with Vulkan
                     
                     LARGE_INTEGER endCounter = Win32GetClockValue();
                     msDeltaTime = 1000.0f * Win32GetSecondsElapsed(lastCounter, endCounter);
                     lastCounter = endCounter;
                     
                     Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
-                    // TODO: This is replaced by better tools when we can render stuff with Vulkan
-                    #if 0
-                    // TODO: debugTimeMarkerIndex - 1 is wrong when debugTimeMarkerIndex = 0
-                    Win32DebugSyncDisplay(&GlobalBackbuffer, ArrayCount(debugTimeMarkers), debugTimeMarkers,
-                                            (debugTimeMarkerIndex - 1), &soundOutput, expectedDeltaTime);
-                    #endif
-                    /* TODO: Remove
-                    HDC deviceContext = GetDC(window);
-                    Win32CopyBufferToWindow(deviceContext, &GlobalBackbuffer, dimensions.width, dimensions.height);
-                    ReleaseDC(window, deviceContext);
-                    */
+                    
                     flipClock = Win32GetClockValue();
                     
-                    // TODO: This is replaced by better tools when we can render stuff with Vulkan
+                    // TODO: REMOVE
                     #if 0
                     {
                         if(GlobalSecondaryBuffer->GetCurrentPosition(&playCursor, &writeCursor) == DS_OK)
@@ -1316,7 +1232,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     OutputDebugStringA(fpsBuffer);
                     #endif
                     
-                    // TODO: This is replaced by better tools when we can render stuff with Vulkan
+                    // TODO: REMOVE
                     #if 0
                     debugTimeMarkerIndex++;
                     if(debugTimeMarkerIndex == ArrayCount(debugTimeMarkers))
