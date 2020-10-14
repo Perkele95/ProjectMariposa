@@ -287,7 +287,7 @@ VkPresentModeKHR ChooseSwapPresentMode(VkPresentModeKHR availablePresentModes[])
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)
+VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities, int windowWidth, int windowHeight)
 {
     if(capabilities.currentExtent.width != 0xFFFFFFFF)
     {
@@ -295,8 +295,7 @@ VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)
     }
     else
     {
-        VkExtent2D actualExtent = { MP_SCREEN_WIDTH, MP_SCREEN_HEIGHT };
-        
+        VkExtent2D actualExtent = { (uint32)windowWidth, (uint32)windowHeight };
         
         actualExtent.width = Uint32Clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
         actualExtent.height = Uint32Clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
@@ -305,13 +304,13 @@ VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities)
     }
 }
 
-static void CreateSwapChain(VulkanData* vkData)
+static void CreateSwapChain(VulkanData* vkData, int windowWidth, int windowHeight)
 {
     SwapChainSupportDetails swapChainDetails = QuerySwapChainSupport(vkData->PhysicalDevice, vkData->Surface);
     
     VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainDetails.Formats);
     VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainDetails.PresentModes);
-    VkExtent2D extent = ChooseSwapExtent(swapChainDetails.Capabilities);
+    VkExtent2D extent = ChooseSwapExtent(swapChainDetails.Capabilities, windowWidth, windowHeight);
     
     uint32 imageCount = swapChainDetails.Capabilities.minImageCount + 1;
     if(swapChainDetails.Capabilities.maxImageCount > 0 && imageCount > swapChainDetails.Capabilities.maxImageCount)
@@ -601,7 +600,7 @@ static void CreateFramebuffers(VulkanData* vkData)
         if(result != VK_SUCCESS)
             OutputDebugStringA("Failed to create framebuffer!");
         
-        vkData->FrameBufferCount++;
+        vkData->FramebufferCount = i;
     }
 }
 
@@ -624,13 +623,13 @@ static void CreateCommandBuffers(VulkanData* vkData)
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vkData->CommandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = vkData->FrameBufferCount;
+    allocInfo.commandBufferCount = vkData->FramebufferCount;
     
     VkResult allocateResult = vkAllocateCommandBuffers(vkData->Device, &allocInfo, vkData->Commandbuffers);
     if(allocateResult != VK_SUCCESS)
         OutputDebugStringA("Failed to allocate command buffers!");
     
-    for(uint32 i = 0; i < vkData->FrameBufferCount; i++)
+    for(uint32 i = 0; i < vkData->FramebufferCount; i++)
     {
         VkCommandBufferBeginInfo beginInfo = {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -681,7 +680,42 @@ static void CreateSyncObjects(VulkanData* vkData)
     }
 }
 
-VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
+static void CleanUpSwapChain(VulkanData* vkData)
+{
+    for(int i = 0; i < MP_VK_SWAP_CHAIN_BUFFER_COUNT; i++)
+    {
+        // TODO: skip emtpy elements perhaps
+        vkDestroyFramebuffer(vkData->Device, vkData->Framebuffers[i], nullptr);
+    }
+    
+    vkFreeCommandBuffers(vkData->Device, vkData->CommandPool, vkData->FramebufferCount, vkData->Commandbuffers);
+    vkDestroyPipeline(vkData->Device, vkData->GraphicsPipeline, nullptr);
+    vkDestroyPipelineLayout(vkData->Device, vkData->PipelineLayout, nullptr);
+    vkDestroyRenderPass(vkData->Device, vkData->RenderPass, nullptr);
+    
+    for(int i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
+    {
+        vkDestroyImageView(vkData->Device, vkData->SwapChainImageViews[i], nullptr);
+    }
+    
+    vkDestroySwapchainKHR(vkData->Device, vkData->SwapChain, nullptr);
+}
+
+static void RecreateSwapChain(VulkanData* vkData, int windowWidth, int windowHeight)
+{
+    vkDeviceWaitIdle(vkData->Device);
+    
+    CleanUpSwapChain(vkData);
+    
+    CreateSwapChain(vkData, windowWidth, windowHeight);
+    CreateImageViews(vkData);
+    CreateRenderPass(vkData);
+    CreateGraphicsPipeline(vkData);
+    CreateFramebuffers(vkData);
+    CreateCommandBuffers(vkData);
+}
+
+VulkanData* VulkanInit(MP_MEMORY* gameMemory, Win32WindowInfo* windowInfo, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
 {
     if(gameMemory->IsInitialised)
         gameMemory->IsInitialised = true;
@@ -698,10 +732,10 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     
     // IMPORTANT: Order matters
     CreateInstance(vkData);
-    CreateWindowSurface(vkData, hInstance, window);
+    CreateWindowSurface(vkData, windowInfo->pHInstance, windowInfo->pWindow);
     PickPhysicalDevice(vkData);
     CreateLogicalDevice(vkData);
-    CreateSwapChain(vkData);
+    CreateSwapChain(vkData, windowInfo->Width, windowInfo->Height);
     CreateImageViews(vkData);
     CreateRenderPass(vkData);
     CreateGraphicsPipeline(vkData);
@@ -713,12 +747,21 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, HINSTANCE* hInstance, HWND* window
     return vkData;
 }
 
-static void DrawFrame(VulkanData* vkData)
+static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight)
 {
     vkWaitForFences(vkData->Device, 1, &vkData->InFlightFences[vkData->currentFrame], VK_TRUE, UINT64MAX);
     
     uint32 imageIndex = 0;
-    vkAcquireNextImageKHR(vkData->Device, vkData->SwapChain, UINT64MAX, vkData->ImageAvailableSemaphores[vkData->currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult imageResult = vkAcquireNextImageKHR(vkData->Device, vkData->SwapChain, UINT64MAX, vkData->ImageAvailableSemaphores[vkData->currentFrame], VK_NULL_HANDLE, &imageIndex);
+    if(imageResult == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        RecreateSwapChain(vkData, windowWidth, windowHeight);
+        return;
+    }
+    else if(imageResult != VK_SUCCESS && imageResult != VK_SUBOPTIMAL_KHR)
+    {
+        OutputDebugStringA("Failed to acquire swap chain image!");
+    }
     
     if(vkData->InFlightImages[imageIndex] != VK_NULL_HANDLE)
     {
@@ -757,20 +800,33 @@ static void DrawFrame(VulkanData* vkData)
     presentInfo.pSwapchains = swapChains;
     presentInfo.pImageIndices = &imageIndex;
     
-    vkQueuePresentKHR(vkData->PresentQueue, &presentInfo);
-    vkQueueWaitIdle(vkData->PresentQueue);
+    VkResult presentResult = vkQueuePresentKHR(vkData->PresentQueue, &presentInfo);
+    if(presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || vkData->FramebufferResized)
+    {
+        *(vkData->FramebufferResized) = false;
+        RecreateSwapChain(vkData, windowWidth, windowHeight);
+    }
+    else if(presentResult != VK_SUCCESS)
+    {
+        OutputDebugStringA("Failed to present swap chain image!");
+    }
     
     vkData->currentFrame = (vkData->currentFrame + 1) % MP_VK_FRAMES_IN_FLIGHT_MAX;
 }
 
-void VulkanUpdate(VulkanData* vkData)
+void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight)
 {
-    DrawFrame(vkData);
+    if(windowWidth == 0 || windowHeight == 0)
+    {
+        return;
+    }
+    
+    DrawFrame(vkData, windowWidth, windowHeight);
 }
 
 void VulkanCleanup(VulkanData* vkData)
 {
-    vkDeviceWaitIdle(vkData->Device);
+    CleanUpSwapChain(vkData);
     
     for(uint32 i = 0; i < MP_VK_FRAMES_IN_FLIGHT_MAX; i++)
     {
@@ -781,22 +837,6 @@ void VulkanCleanup(VulkanData* vkData)
     
     vkDestroyCommandPool(vkData->Device, vkData->CommandPool, nullptr);
     
-    for(int i = 0; i < MP_VK_SWAP_CHAIN_BUFFER_COUNT; i++)
-    {
-        // TODO: skip emtpy elements perhaps
-        vkDestroyFramebuffer(vkData->Device, vkData->Framebuffers[i], nullptr);
-    }
-    
-    vkDestroyPipeline(vkData->Device, vkData->GraphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(vkData->Device, vkData->PipelineLayout, nullptr);
-    vkDestroyRenderPass(vkData->Device, vkData->RenderPass, nullptr);
-    
-    for(int i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
-    {
-        vkDestroyImageView(vkData->Device, vkData->SwapChainImageViews[i], nullptr);
-    }
-    
-    vkDestroySwapchainKHR(vkData->Device, vkData->SwapChain, nullptr);
     vkDestroyDevice(vkData->Device, nullptr);
     vkDestroySurfaceKHR(vkData->Instance, vkData->Surface, nullptr);
     vkDestroyInstance(vkData->Instance, nullptr);

@@ -42,8 +42,9 @@ struct VulkanData
     VkPipeline GraphicsPipeline;
     
     VkFramebuffer Framebuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
-    uint32 FrameBufferCount;
+    uint32 FramebufferCount;
     uint32 currentFrame;
+    bool32* FramebufferResized;
     
     VkCommandPool CommandPool;
     VkCommandBuffer Commandbuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];

@@ -13,7 +13,7 @@
 // TODO: UNglobal these:
 global_variable bool32 GlobalRunning;
 global_variable bool32 GlobalPause;
-global_variable win32OffscreenBuffer GlobalBackbuffer;
+global_variable Win32WindowInfo GlobalWindowInfo = {};
 global_variable IDirectSoundBuffer* GlobalSecondaryBuffer;
 global_variable int64 GlobalPerfCountFrequency;
 global_variable WINDOWPLACEMENT GlobalWindowPos = { sizeof(GlobalWindowPos) };
@@ -309,11 +309,19 @@ internal Win32WindowDimensions Win32GetWindowDimensions(HWND window)
 LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = 0;
-
+    
     switch (message)
     {
         case WM_SIZE:
         {
+            if(wParam == SIZE_MINIMIZED)
+            {
+                
+            }
+            
+            GlobalWindowInfo.Width = (int32)(lParam & 0x0000FFFF);
+            GlobalWindowInfo.Height = (int32)(lParam >> 16);
+            GlobalWindowInfo.WindowResized = true;
         } break;
 
         case WM_CLOSE:
@@ -341,7 +349,6 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
 
         default:
         {
-            //OutputDebugStringA("default\n");
             result = DefWindowProc(window, message, wParam, lParam);
         } break;
     }
@@ -453,12 +460,6 @@ internal void Win32BeginInputRecording(Win32State* state, int inputRecordingInde
         Win32GetInputFileLocation(state, true, inputRecordingIndex, filename, sizeof(filename));
         state->RecordingHandle = CreateFileA(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
         
-        //state->RecordingHandle = replayBuffer->FileHandle;
-        #if 0
-        LARGE_INTEGER filePos;
-        filePos.QuadPart = state->TotalSize;
-        SetFilePointerEx(state->RecordingHandle, filePos, 0, FILE_BEGIN);
-        #endif
         memcpy(replayBuffer->Data, state->GameMemoryBlock, state->TotalSize);
     }
 }
@@ -479,12 +480,6 @@ internal void Win32BeginInputPlayback(Win32State* state, int inputPlaybackIndex)
         Win32GetInputFileLocation(state, true, inputPlaybackIndex, filename, sizeof(filename));
         state->PlaybackHandle = CreateFileA(filename, GENERIC_READ, 0, 0, OPEN_EXISTING, 0, 0);
         
-        //state->PlaybackHandle = replayBuffer->FileHandle;
-        #if 0
-        LARGE_INTEGER filePos;
-        filePos.QuadPart = state->TotalSize;
-        SetFilePointerEx(state->PlaybackHandle, filePos, 0, FILE_BEGIN);
-        #endif
         memcpy(state->GameMemoryBlock, replayBuffer->Data, state->TotalSize);
     }
 }
@@ -545,7 +540,7 @@ internal void Win32ToggleFullScreen(HWND window)
     }
 }
 
-internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPUT* keyboardController, MP_MOUSE_INPUT* mouseInput)
+internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPUT* keyboardController, MP_MOUSE_INPUT* mouseInput, Win32WindowInfo* windowInfo)
 {
     MSG message;
     
@@ -553,6 +548,7 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
     {
         switch(message.message)
         {
+            // TODO: Verfiy that WM_QUIT is not called here
             case WM_QUIT:
             {
                 GlobalRunning = false;
@@ -854,7 +850,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
     Win32LoadXInput();
     
     WNDCLASSA windowClass = {};
-        
+    
     windowClass.style = CS_HREDRAW | CS_VREDRAW;
     windowClass.lpfnWndProc = Win32MainWindowCallback;
     windowClass.hInstance = instance;
@@ -872,6 +868,10 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
         if(window)
         {
             Win32SoundOutput soundOutput = {};
+            GlobalWindowInfo.pWindow = &window;
+            GlobalWindowInfo.pHInstance = &instance;
+            GlobalWindowInfo.Width = MP_SCREEN_WIDTH;
+            GlobalWindowInfo.Height = MP_SCREEN_HEIGHT;
             
             // TODO: refresh rate needs to be queried instead of set to a fixed value
             HDC RefreshDC = GetDC(window);
@@ -956,13 +956,12 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 Win32GameCode game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath, lockFullPath);
                 
                 VulkanData* vkData;
-                {
-                    debug_read_file_result vertShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/vert.spv");
-                    debug_read_file_result fragShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/frag.spv");
-                    vkData = VulkanInit(&gameMemory, &instance, &window, &vertShader, &fragShader);
-                    DEBUGPlatformFreeFileMemory(&thread, vertShader.data);
-                    DEBUGPlatformFreeFileMemory(&thread, fragShader.data);
-                }
+                
+                debug_read_file_result vertShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/vert.spv");
+                debug_read_file_result fragShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/frag.spv");
+                vkData = VulkanInit(&gameMemory, &GlobalWindowInfo, &vertShader, &fragShader);
+                
+                vkData->FramebufferResized = &GlobalWindowInfo.WindowResized;
                 
                 uint64 lastCycleCount = __rdtsc();
                 while(GlobalRunning)
@@ -985,7 +984,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         newKeyboardController->Buttons[index].EndedDown = oldKeyboardController->Buttons[index].EndedDown;
                     }
                     
-                    Win32ProcessPendingMessages(&win32State, newKeyboardController, mouseInput);
+                    Win32ProcessPendingMessages(&win32State, newKeyboardController, mouseInput, &GlobalWindowInfo);
                     
                     if(GlobalPause)
                         continue;
@@ -1064,12 +1063,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                             newController->IsConntected = true;
                         }
                     }
-                                        
-                    MP_OFFSCREENBUFFER buffer = {};
-                    buffer.Memory = GlobalBackbuffer.Memory;
-                    buffer.Width = GlobalBackbuffer.Width;
-                    buffer.Height = GlobalBackbuffer.Height;
-                    buffer.Pitch = GlobalBackbuffer.Pitch;
                     
                     if(win32State.InputRecordingIndex)
                     {
@@ -1083,10 +1076,10 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     if(game.UpdateAndRender)
                     {
                         // Vulkan update call here
-                        game.UpdateAndRender(&thread, &gameMemory, newInput, &buffer, msDeltaTime);
+                        game.UpdateAndRender(&thread, &gameMemory, newInput, msDeltaTime);
                     }
                     
-                    VulkanUpdate(vkData);
+                    VulkanUpdate(vkData, GlobalWindowInfo.Width, GlobalWindowInfo.Height);
                     
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
@@ -1243,8 +1236,8 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 }
                 
                 VulkanCleanup(vkData);
-                DEBUGPlatformFreeFileMemory(&thread, vkData->VertexShader.data);
-                DEBUGPlatformFreeFileMemory(&thread, vkData->FragmentShader.data);
+                DEBUGPlatformFreeFileMemory(&thread, vertShader.data);
+                DEBUGPlatformFreeFileMemory(&thread, fragShader.data);
             }
             else
             {

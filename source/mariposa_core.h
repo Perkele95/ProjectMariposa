@@ -61,6 +61,13 @@ struct debug_read_file_result
     uint32 dataSize;
 };
 
+#if MP_INTERNAL
+struct debug_cycle_counter
+{
+    uint64 CycleCount;
+};
+#endif
+
 #define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(MP_THREAD_CONTEXT* thread, char* filename)
 typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
 
@@ -77,12 +84,6 @@ struct MP_SOUNDOUTPUTBUFFER
     int SamplesPerSecond;
     uint32 SampleCount;
     int16* Samples;
-};
-
-struct MP_OFFSCREENBUFFER
-{
-    void* Memory;
-    int Width, Height, Pitch;
 };
 
 struct MP_BUTTON_STATE
@@ -166,9 +167,13 @@ struct MP_MEMORY
     debug_platform_read_entire_file* DEBUGPlatformReadEntireFile;
     debug_platform_write_entire_file* DEBUGPlatformWriteEntireFile;
     debug_platform_free_file_memory* DEBUGPlatformFreeFileMemory;
+    
+    #if MP_INTERNAL
+    debug_cycle_counter CycleCounters[256];
+    #endif
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* gameMemory, MP_INPUT* input, MP_OFFSCREENBUFFER* buffer, float timestep)
+#define GAME_UPDATE_AND_RENDER(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* gameMemory, MP_INPUT* input, float timestep)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
 
 // NOTE: This function needs to be fast to keep audio latency low

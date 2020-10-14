@@ -2,13 +2,13 @@
 
 typedef unsigned int uint32;
 
-struct win32OffscreenBuffer
+struct Win32WindowInfo
 {
-    BITMAPINFO Info;
-    void* Memory;
-    int Width, Height;
-    int Pitch;
-    int bytesPerPixel;
+    HWND* pWindow;
+    HINSTANCE* pHInstance;
+    int32 Width;
+    int32 Height;
+    bool32 WindowResized;
 };
 
 struct Win32WindowDimensions
