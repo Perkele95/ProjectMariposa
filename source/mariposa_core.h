@@ -62,9 +62,17 @@ struct debug_read_file_result
 };
 
 #if MP_INTERNAL
+enum
+{
+    CycleCounter_GameUpdateAndRender,
+    CycleCounter_VulkanUpdate,
+    CycleCounter_Max
+};
+
 struct debug_cycle_counter
 {
     uint64 CycleCount;
+    uint32 HitCount;
 };
 #endif
 
@@ -76,7 +84,17 @@ typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
 
 #define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(MP_THREAD_CONTEXT* thread, void* memory)
 typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
+
+#if _MSC_VER
+#define PROFILE_BLOCK_START(ID) uint64 startCycleCount##ID = __rdtsc();
+#define PROFILE_BLOCK_END(ID) memory.CycleCounters[CycleCounter_##ID].CycleCount = __rdtsc() - startCycleCount##ID; memory.CycleCounters[CycleCounter_##ID].HitCount++;
+#define PROFILE_BLOCK_END_POINTER(ID) memory->CycleCounters[CycleCounter_##ID].CycleCount = __rdtsc() - startCycleCount##ID; memory->CycleCounters[CycleCounter_##ID].HitCount++;
 #else
+#define PROFILE_BLOCK_START(ID)
+#define PROFILE_BLOCK_END(ID)
+#define PROFILE_BLOCK_END_POINTER(ID)
+#endif
+
 #endif
 
 struct MP_SOUNDOUTPUTBUFFER
@@ -169,13 +187,13 @@ struct MP_MEMORY
     debug_platform_free_file_memory* DEBUGPlatformFreeFileMemory;
     
     #if MP_INTERNAL
-    debug_cycle_counter CycleCounters[256];
+    debug_cycle_counter CycleCounters[CycleCounter_Max];
     #endif
 };
 
-#define GAME_UPDATE_AND_RENDER(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* gameMemory, MP_INPUT* input, float timestep)
+#define GAME_UPDATE_AND_RENDER(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_INPUT* input, float timestep)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
 
 // NOTE: This function needs to be fast to keep audio latency low
-#define GET_SOUND_SAMPLES(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* gameMemory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
+#define GET_SOUND_SAMPLES(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
 typedef GET_SOUND_SAMPLES(get_sound_samples);

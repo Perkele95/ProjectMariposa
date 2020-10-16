@@ -825,6 +825,23 @@ internal void Win32DebugSyncDisplay(win32OffscreenBuffer* backBuffer, int marker
 }
 #endif
 
+static void ProcessProfilingResults(MP_MEMORY* gameMemory)
+{
+    #if MP_INTERNAL
+    OutputDebugStringA("Cycle counts:\n");
+    for(int counterIndex = 0; counterIndex < ArrayCount(gameMemory->CycleCounters); counterIndex++)
+    {
+        debug_cycle_counter* counter = gameMemory->CycleCounters + counterIndex;
+        char buffer[256];
+        _snprintf_s(buffer, sizeof(buffer), "    %d: cycles: %I64u, hits: %d\n", counterIndex, counter->CycleCount, counter->HitCount);
+        OutputDebugStringA(buffer);
+        counter->CycleCount = 0;
+        counter->HitCount = 0;
+    }
+    OutputDebugStringA("\n");
+    #endif
+}
+
 INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
     Win32State win32State = {};
@@ -900,17 +917,17 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 LPVOID baseAddress = 0;
             #endif
             
-            MP_MEMORY gameMemory = {};
-            gameMemory.PermanentStorageSize = MegaBytes(64);
-            gameMemory.TransientStorageSize = GigaBytes(1);
-            gameMemory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
-            gameMemory.DEBUGPlatformReadEntireFile = DEBUGPlatformReadEntireFile;
-            gameMemory.DEBUGPlatformWriteEntireFile = DEBUGPlatformWriteEntireFile;
+            MP_MEMORY memory = {};
+            memory.PermanentStorageSize = MegaBytes(64);
+            memory.TransientStorageSize = GigaBytes(1);
+            memory.DEBUGPlatformFreeFileMemory = DEBUGPlatformFreeFileMemory;
+            memory.DEBUGPlatformReadEntireFile = DEBUGPlatformReadEntireFile;
+            memory.DEBUGPlatformWriteEntireFile = DEBUGPlatformWriteEntireFile;
             
-            win32State.TotalSize = gameMemory.PermanentStorageSize + gameMemory.TransientStorageSize;
+            win32State.TotalSize = memory.PermanentStorageSize + memory.TransientStorageSize;
             win32State.GameMemoryBlock = VirtualAlloc(baseAddress, win32State.TotalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-            gameMemory.PermanentStorage = win32State.GameMemoryBlock;
-            gameMemory.TransientStorage = ((uint8*)gameMemory.PermanentStorage + gameMemory.PermanentStorageSize);
+            memory.PermanentStorage = win32State.GameMemoryBlock;
+            memory.TransientStorage = ((uint8*)memory.PermanentStorage + memory.PermanentStorageSize);
             
             for(int replayIndex = 0; replayIndex < ArrayCount(win32State.ReplayBuffers); replayIndex++)
             {
@@ -935,7 +952,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 }
             }
             
-            if(gameMemory.PermanentStorage && gameMemory.TransientStorage && samples)
+            if(memory.PermanentStorage && memory.TransientStorage && samples)
             {            
                 MP_INPUT input[2] = {};
                 MP_INPUT* newInput = &input[0];
@@ -959,7 +976,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 
                 debug_read_file_result vertShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/vert.spv");
                 debug_read_file_result fragShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/frag.spv");
-                vkData = VulkanInit(&gameMemory, &GlobalWindowInfo, &vertShader, &fragShader);
+                vkData = VulkanInit(&memory, &GlobalWindowInfo, &vertShader, &fragShader);
                 
                 vkData->FramebufferResized = &GlobalWindowInfo.WindowResized;
                 
@@ -1075,12 +1092,15 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     if(game.UpdateAndRender)
                     {
-                        // Vulkan update call here
-                        game.UpdateAndRender(&thread, &gameMemory, newInput, msDeltaTime);
+                        game.UpdateAndRender(&thread, &memory, newInput, msDeltaTime);
                     }
                     
+                    PROFILE_BLOCK_START(VulkanUpdate);
                     VulkanUpdate(vkData, GlobalWindowInfo.Width, GlobalWindowInfo.Height);
+                    PROFILE_BLOCK_END(VulkanUpdate);
                     
+                    ProcessProfilingResults(&memory);
+                        
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
                     
@@ -1156,7 +1176,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         soundBuffer.SampleCount = bytesToWrite / soundOutput.BytesPerSample;
                         soundBuffer.Samples = samples;
                         if(game.GetSoundSamples)
-                            game.GetSoundSamples(&thread, &gameMemory, &soundBuffer);
+                            game.GetSoundSamples(&thread, &memory, &soundBuffer);
                         
                         #if MP_INTERNAL
                         Win32DebugTimeMarker* marker = &debugTimeMarkers[debugTimeMarkerIndex];
