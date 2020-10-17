@@ -3,7 +3,7 @@
 #include "..\Vulkan\Include\vulkan\vulkan.h"
 
 #include "mariposa_core.h"
-#include <stdint.h>
+#include "mp_maths.h"
 
 const uint32 MP_VK_FORMAT_MAX = 10;
 const uint32 MP_VK_PRESENTMODE_MAX = 10;
@@ -28,6 +28,13 @@ const bool32 enableValidationLayers = true;
 #else
 const bool32 enableValidationLayers = false;
 #endif
+
+struct UniformBuffer
+{
+    Mat4 Model;
+    Mat4 View;
+    Mat4 Projection;
+};
 
 struct QueueFamilyIndices {
     uint32 GraphicsFamily;
