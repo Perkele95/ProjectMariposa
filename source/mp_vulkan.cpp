@@ -176,7 +176,6 @@ static SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physDevice
 
 static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice)
 {
-    // TODO: Implement a better suitability checker that selects the best device given a score
     QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, checkedPhysDevice);
     
     bool extensionsSupported = CheckDeviceExtensionSupport(*checkedPhysDevice);
@@ -187,6 +186,7 @@ static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDe
         swapChainAdequate = swapChainDetails.IsAdequate;
     }
     
+    vkData->Indices = indices;
     return indices.IsComplete && extensionsSupported && swapChainAdequate;
 }
 
@@ -215,12 +215,9 @@ static void PickPhysicalDevice(VulkanData* vkData)
 }
 
 static void CreateLogicalDevice(VulkanData* vkData)
-{
-    // TODO: This call has been made before, it could be stored into vkData and passed here for less computation
-    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, &vkData->PhysicalDevice);
-    
+{    
     VkDeviceQueueCreateInfo queueCreateInfos[2] = {};
-    uint32 uniqueQueueFamilies[] = { indices.GraphicsFamily, indices.PresentFamily };
+    uint32 uniqueQueueFamilies[] = { vkData->Indices.GraphicsFamily, vkData->Indices.PresentFamily };
     
     float queuePriority = 1.0f;
     for(uint32 i = 0; i < ArrayCount(uniqueQueueFamilies); i++)
@@ -256,8 +253,8 @@ static void CreateLogicalDevice(VulkanData* vkData)
     if(result != VK_SUCCESS)
         OutputDebugStringA("Failed to create logical device!");
     
-    vkGetDeviceQueue(vkData->Device, indices.GraphicsFamily, 0, &vkData->GraphicsQueue);
-    vkGetDeviceQueue(vkData->Device, indices.PresentFamily, 0, &vkData->PresentQueue);
+    vkGetDeviceQueue(vkData->Device, vkData->Indices.GraphicsFamily, 0, &vkData->GraphicsQueue);
+    vkGetDeviceQueue(vkData->Device, vkData->Indices.PresentFamily, 0, &vkData->PresentQueue);
 }
 
 VkSurfaceFormatKHR ChooseSwapSurfaceFormat(VkSurfaceFormatKHR availableFormats[])
@@ -328,11 +325,9 @@ static void CreateSwapChain(VulkanData* vkData, int windowWidth, int windowHeigh
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     
-    // TODO: Cache this value instead of calling it 3 bloody times
-    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, &vkData->PhysicalDevice);
-    uint32 queueFamilyIndices[] = { indices.GraphicsFamily, indices.PresentFamily };
+    uint32 queueFamilyIndices[] = { vkData->Indices.GraphicsFamily, vkData->Indices.PresentFamily };
     
-    if(indices.GraphicsFamily != indices.PresentFamily)
+    if(vkData->Indices.GraphicsFamily != vkData->Indices.PresentFamily)
     {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
@@ -612,11 +607,9 @@ static void CreateFramebuffers(VulkanData* vkData)
 
 static void CreateCommandPool(VulkanData* vkData)
 {
-    QueueFamilyIndices queueFamilyIndices = FindQueueFamilyIndices(vkData, &vkData->PhysicalDevice);
-    
     VkCommandPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.GraphicsFamily;
+    poolInfo.queueFamilyIndex = vkData->Indices.GraphicsFamily;
     
     VkResult result = vkCreateCommandPool(vkData->Device, &poolInfo, nullptr, &vkData->CommandPool);
     if(result != VK_SUCCESS)
@@ -697,9 +690,9 @@ static void CreateBuffer(const VulkanData* vkData, VkDeviceSize size, VkBufferUs
     vkBindBufferMemory(vkData->Device, *buffer, *bufferMemory, 0);
 }
 
-static void CreateVertexBuffer(VulkanData* vkData)
+static void CreateVertexbuffer(VulkanData* vkData)
 {
-    VkDeviceSize bufferSize = sizeof(vertices);
+    VkDeviceSize bufferSize = sizeof(gVertices);
     
     uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     VkBuffer stagingbuffer;
@@ -708,13 +701,36 @@ static void CreateVertexBuffer(VulkanData* vkData)
     
     void* data;
     vkMapMemory(vkData->Device, stagingbufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices, (uint64)bufferSize);
+    memcpy(data, gVertices, (uint64)bufferSize);
     vkUnmapMemory(vkData->Device, stagingbufferMemory);
     
     uint32 usageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     CreateBuffer(vkData, bufferSize, usageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkData->Vertexbuffer, &vkData->VertexbufferMemory);
     
     CopyBuffer(vkData, stagingbuffer, vkData->Vertexbuffer, bufferSize);
+    
+    vkDestroyBuffer(vkData->Device, stagingbuffer, nullptr);
+    vkFreeMemory(vkData->Device, stagingbufferMemory, nullptr);
+}
+
+static void CreateIndexbuffer(VulkanData* vkData)
+{
+    VkDeviceSize bufferSize = sizeof(gIndices);
+    
+    uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    VkBuffer stagingbuffer;
+    VkDeviceMemory stagingbufferMemory;
+    CreateBuffer(vkData, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &stagingbuffer, &stagingbufferMemory);
+    
+    void* data;
+    vkMapMemory(vkData->Device, stagingbufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, gIndices, (uint64)bufferSize);
+    vkUnmapMemory(vkData->Device, stagingbufferMemory);
+    
+    uint32 usageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    CreateBuffer(vkData, bufferSize, usageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkData->Indexbuffer, &vkData->IndexbufferMemory);
+    
+    CopyBuffer(vkData, stagingbuffer, vkData->Indexbuffer, bufferSize);
     
     vkDestroyBuffer(vkData->Device, stagingbuffer, nullptr);
     vkFreeMemory(vkData->Device, stagingbufferMemory, nullptr);
@@ -759,8 +775,9 @@ static void CreateCommandBuffers(VulkanData* vkData)
         VkBuffer vertexBuffers[] = { vkData->Vertexbuffer };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(vkData->Commandbuffers[i], 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(vkData->Commandbuffers[i], vkData->Indexbuffer, 0, VK_INDEX_TYPE_UINT16);
         
-        vkCmdDraw(vkData->Commandbuffers[i], ArrayCount(vertices), 1, 0, 0);
+        vkCmdDrawIndexed(vkData->Commandbuffers[i], ArrayCount(gIndices), 1, 0, 0, 0);
         vkCmdEndRenderPass(vkData->Commandbuffers[i]);
         
         VkResult endCmdResult = vkEndCommandBuffer(vkData->Commandbuffers[i]);
@@ -849,7 +866,8 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, Win32WindowInfo* windowInfo, debug
     CreateGraphicsPipeline(vkData);
     CreateFramebuffers(vkData);
     CreateCommandPool(vkData);
-    CreateVertexBuffer(vkData);
+    CreateVertexbuffer(vkData);
+    CreateIndexbuffer(vkData);
     CreateCommandBuffers(vkData);
     CreateSyncObjects(vkData);
     
@@ -937,6 +955,8 @@ void VulkanCleanup(VulkanData* vkData)
 {
     CleanUpSwapChain(vkData);
     
+    vkDestroyBuffer(vkData->Device, vkData->Indexbuffer, nullptr);
+    vkFreeMemory(vkData->Device, vkData->IndexbufferMemory, nullptr);
     vkDestroyBuffer(vkData->Device, vkData->Vertexbuffer, nullptr);
     vkFreeMemory(vkData->Device, vkData->VertexbufferMemory, nullptr);
     

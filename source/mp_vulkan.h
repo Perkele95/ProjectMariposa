@@ -14,17 +14,30 @@ const uint32 MP_VK_FRAMES_IN_FLIGHT_MAX = 2;
 const char* validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 const char* deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
-const Vertex vertices[] = {
-    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+const Vertex gVertices[] = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 };
+
+const uint16 gIndices[] = { 0, 1, 2, 2, 3, 0 };
 
 #if MP_INTERNAL
 const bool32 enableValidationLayers = true;
 #else
 const bool32 enableValidationLayers = false;
 #endif
+
+struct QueueFamilyIndices {
+    uint32 GraphicsFamily;
+    bool32 HasGraphicsFamily;
+    
+    uint32 PresentFamily;
+    bool32 HasPresentFamily;
+    
+    bool32 IsComplete;
+};
 
 struct VulkanData
 {
@@ -36,6 +49,7 @@ struct VulkanData
     
     VkQueue GraphicsQueue;
     VkQueue PresentQueue;
+    QueueFamilyIndices Indices;
     
     VkSwapchainKHR SwapChain;
     VkImage SwapChainImages[MP_VK_SWAP_IMAGE_MAX];
@@ -54,8 +68,11 @@ struct VulkanData
     
     VkCommandPool CommandPool;
     VkCommandBuffer Commandbuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
+    
     VkBuffer Vertexbuffer;
     VkDeviceMemory VertexbufferMemory;
+    VkBuffer Indexbuffer;
+    VkDeviceMemory IndexbufferMemory;
     
     VkSemaphore ImageAvailableSemaphore;
     VkSemaphore RenderFinishedSemaphore;
@@ -66,16 +83,6 @@ struct VulkanData
     
     debug_read_file_result VertexShader;
     debug_read_file_result FragmentShader;
-};
-
-struct QueueFamilyIndices {
-    uint32 GraphicsFamily;
-    bool32 HasGraphicsFamily;
-    
-    uint32 PresentFamily;
-    bool32 HasPresentFamily;
-    
-    bool32 IsComplete;
 };
 
 struct SwapChainSupportDetails
