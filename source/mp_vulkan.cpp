@@ -482,10 +482,16 @@ static void CreateGraphicsPipeline(VulkanData* vkData)
     
     VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 0;
-    vertexInputInfo.pVertexBindingDescriptions = nullptr;
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+    
+    VkVertexInputBindingDescription bindingDesc = GetVertexBindingDescription();
+    const uint32 attrDescsSize = 2;
+    VkVertexInputAttributeDescription attributeDescs[attrDescsSize] = {};
+    GetVertexAttributeDescriptions(attributeDescs);
+    
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDesc;
+    vertexInputInfo.vertexAttributeDescriptionCount = attrDescsSize;
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescs;
     
     VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -617,6 +623,53 @@ static void CreateCommandPool(VulkanData* vkData)
         OutputDebugStringA("Failed to create command pool!");
 }
 
+static uint32 FindMemoryType(const VkPhysicalDevice* physDevice, uint32 typeFilter, VkMemoryPropertyFlags propertyFlags)
+{
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(*physDevice, &memProperties);
+    
+    for(uint32 i = 0; i < memProperties.memoryTypeCount; i++)
+    {
+        if(typeFilter & (1 << i) && (memProperties.memoryTypes[i].propertyFlags & propertyFlags) == propertyFlags)
+            return i;
+    }
+    
+    OutputDebugStringA("Failed to find suitable memory type!");
+    return 0;
+}
+
+static void CreateVertexBuffers(VulkanData* vkData)
+{
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(vertices[0]) * ArrayCount(vertices);
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    
+    VkResult bufferResult = vkCreateBuffer(vkData->Device, &bufferInfo, nullptr, &vkData->Vertexbuffer);
+    if(bufferResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to create vertex buffer!");
+    
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(vkData->Device, vkData->Vertexbuffer, &memRequirements);
+    
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = FindMemoryType(&vkData->PhysicalDevice, memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    
+    VkResult allocResult = vkAllocateMemory(vkData->Device, &allocInfo, nullptr, &vkData->VertexbufferMemory);
+    if(allocResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to allocate vertex buffer memory!");
+    
+    vkBindBufferMemory(vkData->Device, vkData->Vertexbuffer, vkData->VertexbufferMemory, 0);
+    
+    void* data;
+    vkMapMemory(vkData->Device, vkData->VertexbufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, vertices, (uint64)bufferInfo.size);
+    vkUnmapMemory(vkData->Device, vkData->VertexbufferMemory);
+}
+
 static void CreateCommandBuffers(VulkanData* vkData)
 {
     VkCommandBufferAllocateInfo allocInfo = {};
@@ -652,7 +705,12 @@ static void CreateCommandBuffers(VulkanData* vkData)
         
         vkCmdBeginRenderPass(vkData->Commandbuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(vkData->Commandbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vkData->GraphicsPipeline);
-        vkCmdDraw(vkData->Commandbuffers[i], 3, 1, 0, 0);
+        
+        VkBuffer vertexBuffers[] = { vkData->Vertexbuffer };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(vkData->Commandbuffers[i], 0, 1, vertexBuffers, offsets);
+        
+        vkCmdDraw(vkData->Commandbuffers[i], ArrayCount(vertices), 1, 0, 0);
         vkCmdEndRenderPass(vkData->Commandbuffers[i]);
         
         VkResult endCmdResult = vkEndCommandBuffer(vkData->Commandbuffers[i]);
@@ -741,6 +799,7 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, Win32WindowInfo* windowInfo, debug
     CreateGraphicsPipeline(vkData);
     CreateFramebuffers(vkData);
     CreateCommandPool(vkData);
+    CreateVertexBuffers(vkData);
     CreateCommandBuffers(vkData);
     CreateSyncObjects(vkData);
     
@@ -827,6 +886,9 @@ void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight)
 void VulkanCleanup(VulkanData* vkData)
 {
     CleanUpSwapChain(vkData);
+    
+    vkDestroyBuffer(vkData->Device, vkData->Vertexbuffer, nullptr);
+    vkFreeMemory(vkData->Device, vkData->VertexbufferMemory, nullptr);
     
     for(uint32 i = 0; i < MP_VK_FRAMES_IN_FLIGHT_MAX; i++)
     {

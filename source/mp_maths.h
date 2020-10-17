@@ -1,5 +1,10 @@
 #pragma once
 
+struct Vector2
+{
+    float X, Y;
+};
+
 struct Vector3
 {
     float X, Y, Z;
@@ -28,20 +33,6 @@ inline Vector3& operator*=(Vector3 &a, float b)
     return a;
 }
 
-inline Vector3& operator+=(Vector3 &a, Vector3 b)
-{
-    a = a + b;
-    
-    return a;
-}
-
-inline Vector3& operator-=(Vector3 &a, Vector3 b)
-{
-    a = a - b;
-    
-    return a;
-}
-
 inline Vector3 operator+(Vector3 a)
 {
     Vector3 result;
@@ -64,6 +55,13 @@ inline Vector3 operator+(Vector3 a, Vector3 b)
     return result;
 }
 
+inline Vector3& operator+=(Vector3 &a, Vector3 b)
+{
+    a = a + b;
+    
+    return a;
+}
+
 inline Vector3 operator-(Vector3 a, Vector3 b)
 {
     Vector3 result;
@@ -73,4 +71,11 @@ inline Vector3 operator-(Vector3 a, Vector3 b)
     result.Z = a.Z - b.Z;
     
     return result;
+}
+
+inline Vector3& operator-=(Vector3 &a, Vector3 b)
+{
+    a = a - b;
+    
+    return a;
 }

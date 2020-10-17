@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mariposa_core.h"
+#include "mp_maths.h"
 
 inline internal uint32 SafeTruncateUint32(uint64 value)
 {
@@ -17,6 +18,12 @@ inline internal MP_CONTROLLER_INPUT* GetController(MP_INPUT* input, int controll
     
     return &input->Controllers[controllerIndex];
 }
+
+struct Vertex
+{
+    Vector2 Position;
+    Vector3 Colour;
+};
 
 struct MP_GAMESTATE
 {
