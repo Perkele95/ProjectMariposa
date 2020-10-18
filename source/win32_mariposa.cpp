@@ -960,7 +960,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 
                 LARGE_INTEGER lastCounter = Win32GetClockValue();
                 LARGE_INTEGER flipClock = Win32GetClockValue();
-                float msDeltaTime = 0.0f;
+                float deltaTime = 0.001f;
                 
                 uint32 debugTimeMarkerIndex = 0;
                 Win32DebugTimeMarker debugTimeMarkers[30] = {};
@@ -1092,11 +1092,11 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     if(game.UpdateAndRender)
                     {
-                        game.UpdateAndRender(&thread, &memory, newInput, msDeltaTime);
+                        game.UpdateAndRender(&thread, &memory, newInput, deltaTime);
                     }
                     
                     PROFILE_BLOCK_START(VulkanUpdate);
-                    VulkanUpdate(vkData, GlobalWindowInfo.Width, GlobalWindowInfo.Height);
+                    VulkanUpdate(vkData, GlobalWindowInfo.Width, GlobalWindowInfo.Height, deltaTime);
                     PROFILE_BLOCK_END(VulkanUpdate);
                     
                     ProcessProfilingResults(&memory);
@@ -1207,7 +1207,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     // TODO: Add Vsync toggle and a Vsync wait here with Vulkan
                     
                     LARGE_INTEGER endCounter = Win32GetClockValue();
-                    msDeltaTime = 1000.0f * Win32GetSecondsElapsed(lastCounter, endCounter);
+                    deltaTime = Win32GetSecondsElapsed(lastCounter, endCounter);
                     lastCounter = endCounter;
                     
                     Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);

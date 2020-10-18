@@ -3,7 +3,6 @@
 #include "..\Vulkan\Include\vulkan\vulkan.h"
 
 #include "mariposa_core.h"
-#include "mp_maths.h"
 
 const uint32 MP_VK_FORMAT_MAX = 10;
 const uint32 MP_VK_PRESENTMODE_MAX = 10;
@@ -14,6 +13,12 @@ const uint32 MP_VK_FRAMES_IN_FLIGHT_MAX = 2;
 const char* validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 const char* deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
+#if MP_INTERNAL
+const bool32 enableValidationLayers = true;
+#else
+const bool32 enableValidationLayers = false;
+#endif
+
 const Vertex gVertices[] = {
     {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
@@ -23,17 +28,13 @@ const Vertex gVertices[] = {
 
 const uint16 gIndices[] = { 0, 1, 2, 2, 3, 0 };
 
-#if MP_INTERNAL
-const bool32 enableValidationLayers = true;
-#else
-const bool32 enableValidationLayers = false;
-#endif
+static float GlobalRotation = 0.0f;
 
-struct UniformBuffer
+struct UniformbufferObject
 {
     Mat4 Model;
     Mat4 View;
-    Mat4 Projection;
+    Mat4 Proj;
 };
 
 struct QueueFamilyIndices {
@@ -65,6 +66,9 @@ struct VulkanData
     VkExtent2D SwapChainExtent;
     
     VkRenderPass RenderPass;
+    VkDescriptorPool DescriptorPool;
+    VkDescriptorSet DescriptorSets[MP_VK_SWAP_IMAGE_MAX];
+    VkDescriptorSetLayout DescriptorSetLayout;
     VkPipelineLayout PipelineLayout;
     VkPipeline GraphicsPipeline;
     
@@ -80,6 +84,8 @@ struct VulkanData
     VkDeviceMemory VertexbufferMemory;
     VkBuffer Indexbuffer;
     VkDeviceMemory IndexbufferMemory;
+    VkBuffer Uniformbuffers[MP_VK_SWAP_IMAGE_MAX];
+    VkDeviceMemory UniformbuffersMemory[MP_VK_SWAP_IMAGE_MAX];
     
     VkSemaphore ImageAvailableSemaphore;
     VkSemaphore RenderFinishedSemaphore;

@@ -456,6 +456,25 @@ static void CreateRenderPass(VulkanData* vkData)
         OutputDebugStringA("Failed to create render pass!");
 }
 
+static void CreateDescriptorSetLayout(VulkanData* vkData)
+{
+    VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorCount = 1;
+    uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutBinding.pImmutableSamplers = nullptr;
+    
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &uboLayoutBinding;
+    
+    VkResult layoutResult = vkCreateDescriptorSetLayout(vkData->Device, &layoutInfo, nullptr, &vkData->DescriptorSetLayout);
+    if(layoutResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to create descriptor set layout!");
+}
+
 static void CreateGraphicsPipeline(VulkanData* vkData)
 {
     VkShaderModule vertexShaderModule = CreateShaderModule(&vkData->Device, &vkData->VertexShader);
@@ -519,7 +538,7 @@ static void CreateGraphicsPipeline(VulkanData* vkData)
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
     
     VkPipelineMultisampleStateCreateInfo multisampling = {};
@@ -547,8 +566,8 @@ static void CreateGraphicsPipeline(VulkanData* vkData)
     
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pSetLayouts = nullptr;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    pipelineLayoutInfo.pSetLayouts = &vkData->DescriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0;
     pipelineLayoutInfo.pPushConstantRanges = nullptr;
     
@@ -736,6 +755,70 @@ static void CreateIndexbuffer(VulkanData* vkData)
     vkFreeMemory(vkData->Device, stagingbufferMemory, nullptr);
 }
 
+static void CreateUniformbuffers(VulkanData* vkData)
+{
+    VkDeviceSize bufferSize = sizeof(UniformbufferObject);
+    uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    
+    for(uint32 i = 0; i < vkData->FramebufferCount; i++)
+    {
+        CreateBuffer(vkData, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, bufferSrcFlags, &vkData->Uniformbuffers[i], &vkData->UniformbuffersMemory[i]);
+    }
+}
+
+static void CreateDescriptorPool(VulkanData* vkData)
+{
+    VkDescriptorPoolSize poolSize = {};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = vkData->FramebufferCount;
+    
+    VkDescriptorPoolCreateInfo poolInfo = {};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = vkData->FramebufferCount;
+    
+    VkResult poolResult = vkCreateDescriptorPool(vkData->Device, &poolInfo, nullptr, &vkData->DescriptorPool);
+    if(poolResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to create descriptor pool!");
+}
+
+static void CreateDescritporSets(VulkanData* vkData)
+{
+    VkDescriptorSetLayout layouts[MP_VK_SWAP_IMAGE_MAX];
+    for(uint32 i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
+        layouts[i] = vkData->DescriptorSetLayout;
+        
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = vkData->DescriptorPool;
+    allocInfo.descriptorSetCount = vkData->FramebufferCount;
+    allocInfo.pSetLayouts = layouts;
+    
+    VkResult allocResult = vkAllocateDescriptorSets(vkData->Device, &allocInfo, vkData->DescriptorSets);
+    if(allocResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to allocate descriptor sets!");
+    
+    for(uint32 i = 0; i < vkData->FramebufferCount; i++)
+    {
+        VkDescriptorBufferInfo bufferInfo = {};
+        bufferInfo.buffer = vkData->Uniformbuffers[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformbufferObject);
+        
+        VkWriteDescriptorSet descriptorWrite = {};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = vkData->DescriptorSets[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+        
+        vkUpdateDescriptorSets(vkData->Device, 1, &descriptorWrite, 0, nullptr);
+    }
+}
+
 static void CreateCommandBuffers(VulkanData* vkData)
 {
     VkCommandBufferAllocateInfo allocInfo = {};
@@ -776,6 +859,8 @@ static void CreateCommandBuffers(VulkanData* vkData)
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(vkData->Commandbuffers[i], 0, 1, vertexBuffers, offsets);
         vkCmdBindIndexBuffer(vkData->Commandbuffers[i], vkData->Indexbuffer, 0, VK_INDEX_TYPE_UINT16);
+        
+        vkCmdBindDescriptorSets(vkData->Commandbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, vkData->PipelineLayout, 0, 1, &vkData->DescriptorSets[i], 0, nullptr);
         
         vkCmdDrawIndexed(vkData->Commandbuffers[i], ArrayCount(gIndices), 1, 0, 0, 0);
         vkCmdEndRenderPass(vkData->Commandbuffers[i]);
@@ -824,6 +909,14 @@ static void CleanUpSwapChain(VulkanData* vkData)
     }
     
     vkDestroySwapchainKHR(vkData->Device, vkData->SwapChain, nullptr);
+    
+    for(uint32 i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
+    {
+        vkDestroyBuffer(vkData->Device, vkData->Uniformbuffers[i], nullptr);
+        vkFreeMemory(vkData->Device, vkData->UniformbuffersMemory[i], nullptr);
+    }
+    
+    vkDestroyDescriptorPool(vkData->Device, vkData->DescriptorPool, nullptr);
 }
 
 static void RecreateSwapChain(VulkanData* vkData, int windowWidth, int windowHeight)
@@ -837,6 +930,9 @@ static void RecreateSwapChain(VulkanData* vkData, int windowWidth, int windowHei
     CreateRenderPass(vkData);
     CreateGraphicsPipeline(vkData);
     CreateFramebuffers(vkData);
+    CreateUniformbuffers(vkData);
+    CreateDescriptorPool(vkData);
+    CreateDescritporSets(vkData);
     CreateCommandBuffers(vkData);
 }
 
@@ -863,18 +959,38 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, Win32WindowInfo* windowInfo, debug
     CreateSwapChain(vkData, windowInfo->Width, windowInfo->Height);
     CreateImageViews(vkData);
     CreateRenderPass(vkData);
+    CreateDescriptorSetLayout(vkData);
     CreateGraphicsPipeline(vkData);
     CreateFramebuffers(vkData);
     CreateCommandPool(vkData);
     CreateVertexbuffer(vkData);
     CreateIndexbuffer(vkData);
+    CreateUniformbuffers(vkData);
+    CreateDescriptorPool(vkData);
+    CreateDescritporSets(vkData);
     CreateCommandBuffers(vkData);
     CreateSyncObjects(vkData);
     
     return vkData;
 }
 
-static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight)
+static void UpdateUniformbuffer(uint32 currentImage, VulkanData* vkData, float deltaTime)
+{
+    UniformbufferObject ubo = {};
+    GlobalRotation += deltaTime;
+    
+    ubo.Model = Mat4RotateZ(GlobalRotation);
+    ubo.View = LookAt({ 2.0f, 2.0f, 2.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f });
+    ubo.Proj = Perspective(PI32 / 4.0f, (float)vkData->SwapChainExtent.width / (float)vkData->SwapChainExtent.height, 0.1f, 10.0f);
+    
+    void* data;
+    VkDeviceSize dataSize = sizeof(ubo);
+    vkMapMemory(vkData->Device, vkData->UniformbuffersMemory[currentImage], 0, dataSize, 0, &data);
+    memcpy(data, &ubo, dataSize);
+    vkUnmapMemory(vkData->Device, vkData->UniformbuffersMemory[currentImage]);
+}
+
+static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight, float deltaTime)
 {
     vkWaitForFences(vkData->Device, 1, &vkData->InFlightFences[vkData->currentFrame], VK_TRUE, UINT64MAX);
     
@@ -895,6 +1011,8 @@ static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight)
         vkWaitForFences(vkData->Device, 1, &vkData->InFlightImages[imageIndex], VK_TRUE, UINT64MAX);
     }
     vkData->InFlightImages[imageIndex] = vkData->InFlightFences[vkData->currentFrame];
+    
+    UpdateUniformbuffer(imageIndex, vkData, deltaTime);
     
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -941,19 +1059,21 @@ static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight)
     vkData->currentFrame = (vkData->currentFrame + 1) % MP_VK_FRAMES_IN_FLIGHT_MAX;
 }
 
-void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight)
+void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight, float deltaTime)
 {
     if(windowWidth == 0 || windowHeight == 0)
     {
         return;
     }
     
-    DrawFrame(vkData, windowWidth, windowHeight);
+    DrawFrame(vkData, windowWidth, windowHeight, deltaTime);
 }
 
 void VulkanCleanup(VulkanData* vkData)
 {
     CleanUpSwapChain(vkData);
+    
+    vkDestroyDescriptorSetLayout(vkData->Device, vkData->DescriptorSetLayout, nullptr);
     
     vkDestroyBuffer(vkData->Device, vkData->Indexbuffer, nullptr);
     vkFreeMemory(vkData->Device, vkData->IndexbufferMemory, nullptr);
