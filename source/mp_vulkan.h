@@ -3,6 +3,7 @@
 #include "..\Vulkan\Include\vulkan\vulkan.h"
 
 #include "mariposa_core.h"
+#include "mp_maths.h"
 
 const uint32 MP_VK_FORMAT_MAX = 10;
 const uint32 MP_VK_PRESENTMODE_MAX = 10;
@@ -86,6 +87,9 @@ struct VulkanData
     VkDeviceMemory IndexbufferMemory;
     VkBuffer Uniformbuffers[MP_VK_SWAP_IMAGE_MAX];
     VkDeviceMemory UniformbuffersMemory[MP_VK_SWAP_IMAGE_MAX];
+    
+    VkImage TextureImage;
+    VkDeviceMemory TextureImageMemory;
     
     VkSemaphore ImageAvailableSemaphore;
     VkSemaphore RenderFinishedSemaphore;
