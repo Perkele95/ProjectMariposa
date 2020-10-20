@@ -1145,13 +1145,10 @@ static void RecreateSwapChain(VulkanData* vkData, int windowWidth, int windowHei
     CreateCommandBuffers(vkData);
 }
 
-VulkanData* VulkanInit(MP_MEMORY* gameMemory, Win32WindowInfo* windowInfo, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
+VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
 {
-    if(gameMemory->IsInitialised)
-        gameMemory->IsInitialised = true;
-
-    VulkanData* vkData = (VulkanData*)gameMemory->PermanentStorage;
-    gameMemory->PermanentStorage = (VulkanData*)gameMemory->PermanentStorage + 1;
+    VulkanData* vkData = (VulkanData*)memory->PermanentStorage;
+    memory->PermanentStorage = (VulkanData*)memory->PermanentStorage + 1;
     OutputDebugStringA("Vulkan Data initialised\n");
 
     vkData->VertexShader = *vertShader;
@@ -1186,13 +1183,12 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, Win32WindowInfo* windowInfo, debug
     return vkData;
 }
 
-static void UpdateUniformbuffer(uint32 currentImage, VulkanData* vkData, float deltaTime)
+static void UpdateUniformbuffer(uint32 currentImage, VulkanData* vkData, MP_RENDERDATA* renderData)
 {
     UniformbufferObject ubo = {};
-    GlobalRotation += deltaTime;
 
-    ubo.Model = Mat4RotateZ(GlobalRotation);
-    ubo.View = LookAt({ 2.0f, 2.0f, 2.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f });
+    ubo.Model = Mat4RotateZ(0.0f);
+    ubo.View = LookAt(renderData->CameraPosition, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}) * Mat4RotateX(renderData->CameraRotation.X) * Mat4RotateY(renderData->CameraRotation.Y);
     ubo.Proj = Perspective(PI32 / 4.0f, (float)vkData->SwapChainExtent.width / (float)vkData->SwapChainExtent.height, 0.1f, 10.0f);
 
     void* data;
@@ -1202,7 +1198,7 @@ static void UpdateUniformbuffer(uint32 currentImage, VulkanData* vkData, float d
     vkUnmapMemory(vkData->Device, vkData->UniformbuffersMemory[currentImage]);
 }
 
-static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight, float deltaTime)
+static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight, MP_RENDERDATA* renderData)
 {
     vkWaitForFences(vkData->Device, 1, &vkData->InFlightFences[vkData->currentFrame], VK_TRUE, UINT64MAX);
 
@@ -1224,7 +1220,7 @@ static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight, flo
     }
     vkData->InFlightImages[imageIndex] = vkData->InFlightFences[vkData->currentFrame];
 
-    UpdateUniformbuffer(imageIndex, vkData, deltaTime);
+    UpdateUniformbuffer(imageIndex, vkData, renderData);
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1271,14 +1267,14 @@ static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight, flo
     vkData->currentFrame = (vkData->currentFrame + 1) % MP_VK_FRAMES_IN_FLIGHT_MAX;
 }
 
-void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight, float deltaTime)
+void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight, MP_RENDERDATA* renderData)
 {
     if(windowWidth == 0 || windowHeight == 0)
     {
         return;
     }
 
-    DrawFrame(vkData, windowWidth, windowHeight, deltaTime);
+    DrawFrame(vkData, windowWidth, windowHeight, renderData);
 }
 
 void VulkanCleanup(VulkanData* vkData)

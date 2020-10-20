@@ -26,7 +26,20 @@ struct Vertex
     Vector2 TexCoord;
 };
 
+struct MP_RENDERDATA
+{
+    Vector3 CameraPosition;
+    Vector3 CameraRotation;
+};
+
+#define GAME_UPDATE_AND_RENDER(name) MP_RENDERDATA* name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_INPUT* input, float timestep)
+typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
+
+// NOTE: This function needs to be fast to keep audio latency low
+#define GET_SOUND_SAMPLES(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
+typedef GET_SOUND_SAMPLES(get_sound_samples);
+
 struct MP_GAMESTATE
 {
-    
+    MP_RENDERDATA RenderData;
 };

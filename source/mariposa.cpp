@@ -23,10 +23,10 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 
     if(!memory->IsInitialised)
     {
-        // TODO: Perhaps put this into platform layer
         memory->IsInitialised = true;
+        gameState->RenderData.CameraPosition = {2.0f, 2.0f, 2.0f};
     }
-
+    
     for(int index = 0; index < ArrayCount(input->Controllers); index++)
     {
         MP_CONTROLLER_INPUT* controller = GetController(input, index);
@@ -38,11 +38,34 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         }
         else
         {
-            // Digital keyboard input goes here
+            if(controller->Up.EndedDown)
+            {
+                gameState->RenderData.CameraRotation.X += 2.0f * timestep;
+            }
+            else if(controller->Down.EndedDown)
+            {
+                gameState->RenderData.CameraRotation.X -= 2.0f * timestep;
+            }
+            if(controller->Left.EndedDown)
+            {
+                gameState->RenderData.CameraRotation.Y += 2.0f * timestep;
+            }
+            else if(controller->Right.EndedDown)
+            {
+                gameState->RenderData.CameraRotation.Y -= 2.0f * timestep;
+            }
         }
     }
-
+    
+    if(input[0].Mouse.Wheel)
+    {
+        gameState->RenderData.CameraPosition.Y += (float)input[0].Mouse.Wheel * timestep;
+        input[0].Mouse.Wheel = 0;
+    }
+    
     PROFILE_BLOCK_END_POINTER(GameUpdateAndRender);
+    
+    return &gameState->RenderData;
 }
 
 extern "C" GET_SOUND_SAMPLES(GetSoundSamples)

@@ -973,6 +973,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 Win32GameCode game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath, lockFullPath);
                 
                 VulkanData* vkData;
+                MP_RENDERDATA* renderData = nullptr;
                 
                 debug_read_file_result vertShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/vert.spv");
                 debug_read_file_result fragShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/frag.spv");
@@ -1092,11 +1093,11 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     if(game.UpdateAndRender)
                     {
-                        game.UpdateAndRender(&thread, &memory, newInput, deltaTime);
+                        renderData = game.UpdateAndRender(&thread, &memory, newInput, deltaTime);
                     }
                     
                     PROFILE_BLOCK_START(VulkanUpdate);
-                    VulkanUpdate(vkData, GlobalWindowInfo.Width, GlobalWindowInfo.Height, deltaTime);
+                    VulkanUpdate(vkData, GlobalWindowInfo.Width, GlobalWindowInfo.Height, renderData);
                     PROFILE_BLOCK_END(VulkanUpdate);
                     
                     ProcessProfilingResults(&memory);

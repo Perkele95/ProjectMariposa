@@ -149,7 +149,7 @@ struct MP_MOUSE_BUTTON_STATE
 
 struct MP_MOUSE_INPUT
 {
-    int X, Y, Wheel;
+    int32 X, Y, Wheel;
     bool32 ShowCursor;
     
     union
@@ -190,10 +190,3 @@ struct MP_MEMORY
     debug_cycle_counter CycleCounters[CycleCounter_Max];
     #endif
 };
-
-#define GAME_UPDATE_AND_RENDER(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_INPUT* input, float timestep)
-typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
-
-// NOTE: This function needs to be fast to keep audio latency low
-#define GET_SOUND_SAMPLES(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
-typedef GET_SOUND_SAMPLES(get_sound_samples);
