@@ -5,3 +5,5 @@ set PATH=j:\source;%PATH%
 pushd ..\build
 devenv win32_mariposa.exe
 popd
+
+cd scripts

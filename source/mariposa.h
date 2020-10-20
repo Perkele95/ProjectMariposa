@@ -23,6 +23,7 @@ struct Vertex
 {
     Vector2 Position;
     Vector3 Colour;
+    Vector2 TexCoord;
 };
 
 struct MP_GAMESTATE

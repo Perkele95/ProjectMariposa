@@ -8,7 +8,7 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
     for(DWORD sampleIndex = 0; sampleIndex < soundBuffer->SampleCount; sampleIndex++)
     {
         int16 sampleValue = 0;
-        
+
         *sampleOut++ = sampleValue;
         *sampleOut++ = sampleValue;
     }
@@ -17,16 +17,16 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
     PROFILE_BLOCK_START(GameUpdateAndRender);
-    
+
     MP_GAMESTATE* gameState = (MP_GAMESTATE*)memory->PermanentStorage;
     MP_ASSERT(sizeof(gameState) <= memory->PermanentStorageSize);
-    
+
     if(!memory->IsInitialised)
     {
         // TODO: Perhaps put this into platform layer
         memory->IsInitialised = true;
     }
-    
+
     for(int index = 0; index < ArrayCount(input->Controllers); index++)
     {
         MP_CONTROLLER_INPUT* controller = GetController(input, index);
@@ -41,7 +41,7 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
             // Digital keyboard input goes here
         }
     }
-    
+
     PROFILE_BLOCK_END_POINTER(GameUpdateAndRender);
 }
 

@@ -21,10 +21,10 @@ const bool32 enableValidationLayers = false;
 #endif
 
 const Vertex gVertices[] = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
 };
 
 const uint16 gIndices[] = { 0, 1, 2, 2, 3, 0 };
@@ -133,8 +133,9 @@ static VkVertexInputBindingDescription GetVertexBindingDescription()
     return bindingDescription;
 }
 
-static void GetVertexAttributeDescriptions(VkVertexInputAttributeDescription attributeDescriptions[])
+static void GetVertexAttributeDescriptions(VkVertexInputAttributeDescription attributeDescriptions[], uint32 size)
 {
+    MP_ASSERT(size >= 3);
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;
     attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
@@ -144,4 +145,9 @@ static void GetVertexAttributeDescriptions(VkVertexInputAttributeDescription att
     attributeDescriptions[1].location = 1;
     attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
     attributeDescriptions[1].offset = offsetof(Vertex, Colour);
+    
+    attributeDescriptions[2].binding = 0;
+    attributeDescriptions[2].location = 2;
+    attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[2].offset = offsetof(Vertex, TexCoord);
 }
