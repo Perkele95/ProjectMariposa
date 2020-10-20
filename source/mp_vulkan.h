@@ -33,9 +33,9 @@ static float GlobalRotation = 0.0f;
 
 struct UniformbufferObject
 {
-    Mat4 Model;
-    Mat4 View;
-    Mat4 Proj;
+    alignas(16) Mat4 Model;
+    alignas(16) Mat4 View;
+    alignas(16) Mat4 Proj;
 };
 
 struct QueueFamilyIndices {
@@ -90,6 +90,8 @@ struct VulkanData
     
     VkImage TextureImage;
     VkDeviceMemory TextureImageMemory;
+    VkImageView TextureImageView;
+    VkSampler TextureSampler;
     
     VkSemaphore ImageAvailableSemaphore;
     VkSemaphore RenderFinishedSemaphore;

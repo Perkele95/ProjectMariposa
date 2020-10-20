@@ -190,7 +190,11 @@ static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDe
     }
     
     vkData->Indices = indices;
-    return indices.IsComplete && extensionsSupported && swapChainAdequate;
+    
+    VkPhysicalDeviceFeatures supportedFeatures = {};
+    vkGetPhysicalDeviceFeatures(*checkedPhysDevice, &supportedFeatures);
+    
+    return indices.IsComplete && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 }
 
 static void PickPhysicalDevice(VulkanData* vkData)
@@ -234,6 +238,8 @@ static void CreateLogicalDevice(VulkanData* vkData)
     }
     
     VkPhysicalDeviceFeatures deviceFeatures = {};
+    deviceFeatures.samplerAnisotropy = VK_TRUE;
+    
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.queueCreateInfoCount = ArrayCount(queueCreateInfos);
@@ -361,6 +367,30 @@ static void CreateSwapChain(VulkanData* vkData, int windowWidth, int windowHeigh
     vkData->SwapChainExtent = extent;
 }
 
+static VkImageView CreateImageView(VkDevice device, VkImage image, VkFormat format)
+{
+    VkImageViewCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    createInfo.image = image;
+    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    createInfo.format = format;
+    createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    createInfo.subresourceRange.baseMipLevel = 0;
+    createInfo.subresourceRange.levelCount = 1;
+    createInfo.subresourceRange.baseArrayLayer = 0;
+    createInfo.subresourceRange.layerCount = 1;
+    
+    VkImageView imageView;
+    if(vkCreateImageView(device, &createInfo, nullptr, &imageView) != VK_SUCCESS)
+        OutputDebugStringA("Failed to create image view!");
+    
+    return imageView;
+}
+
 static void CreateImageViews(VulkanData* vkData)
 {
     for(uint32 i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
@@ -368,24 +398,7 @@ static void CreateImageViews(VulkanData* vkData)
         if(vkData->SwapChainImages[i] == 0)
             break;
         
-        VkImageViewCreateInfo createInfo = {};
-        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        createInfo.image = vkData->SwapChainImages[i];
-        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        createInfo.format = vkData->SwapChainImageFormat;
-        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-        
-        VkResult result = vkCreateImageView(vkData->Device, &createInfo, nullptr, &vkData->SwapChainImageViews[i]);
-        if(result != VK_SUCCESS)
-            OutputDebugStringA("Failed to create image views!");
+        vkData->SwapChainImageViews[i] = CreateImageView(vkData->Device, vkData->SwapChainImages[i], vkData->SwapChainImageFormat);
     }
 }
 
@@ -779,8 +792,6 @@ static void TransitionImageLayout(VulkanData* vkData, VkFormat format, VkImageLa
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
-    barrier.srcAccessMask = 0; // TODO
-    barrier.dstAccessMask = 0; // TODO
     
     VkPipelineStageFlags sourceStage = {};
     VkPipelineStageFlags destStage = {};
@@ -848,10 +859,39 @@ static void CreateTextureImage(VulkanData* vkData)
     
     TransitionImageLayout(vkData, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     CopyBufferToImage(vkData, stagingbuffer, (uint32)texWidth, (uint32)texHeight);
-    TransitionImageLayout(vkData, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    TransitionImageLayout(vkData, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     
     vkDestroyBuffer(vkData->Device, stagingbuffer, nullptr);
     vkFreeMemory(vkData->Device, stagingbufferMemory, nullptr);
+}
+
+static void CreateTextureImageView(VulkanData* vkData)
+{
+    vkData->TextureImageView = CreateImageView(vkData->Device, vkData->TextureImage, VK_FORMAT_R8G8B8A8_SRGB);
+}
+
+static void CreateTextureSampler(VulkanData* vkData)
+{
+    VkSamplerCreateInfo samplerInfo = {};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = 16.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    
+    VkResult samplerResult = vkCreateSampler(vkData->Device, &samplerInfo, nullptr, &vkData->TextureSampler);
+    if(samplerResult != VK_SUCCESS)
+        OutputDebugStringA("Failed to create texture sampler!");
 }
 
 static void CreateVertexbuffer(VulkanData* vkData)
@@ -1109,6 +1149,8 @@ VulkanData* VulkanInit(MP_MEMORY* gameMemory, Win32WindowInfo* windowInfo, debug
     CreateFramebuffers(vkData);
     CreateCommandPool(vkData);
     CreateTextureImage(vkData);
+    CreateTextureImageView(vkData);
+    CreateTextureSampler(vkData);
     CreateVertexbuffer(vkData);
     CreateIndexbuffer(vkData);
     CreateUniformbuffers(vkData);
@@ -1219,6 +1261,8 @@ void VulkanCleanup(VulkanData* vkData)
 {
     CleanUpSwapChain(vkData);
     
+    vkDestroySampler(vkData->Device, vkData->TextureSampler, nullptr);
+    vkDestroyImageView(vkData->Device, vkData->TextureImageView, nullptr);
     vkDestroyImage(vkData->Device, vkData->TextureImage, nullptr);
     vkFreeMemory(vkData->Device, vkData->TextureImageMemory, nullptr);
     
