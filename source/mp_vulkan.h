@@ -21,13 +21,21 @@ const bool32 enableValidationLayers = false;
 #endif
 
 const Vertex gVertices[] = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
-const uint16 gIndices[] = { 0, 1, 2, 2, 3, 0 };
+const uint16 gIndices[] = {
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4
+};
 
 static float GlobalRotation = 0.0f;
 
@@ -93,6 +101,10 @@ struct VulkanData
     VkImageView TextureImageView;
     VkSampler TextureSampler;
     
+    VkImage DepthImage;
+    VkDeviceMemory DepthImageMemory;
+    VkImageView DepthImageView; 
+    
     VkSemaphore ImageAvailableSemaphore;
     VkSemaphore RenderFinishedSemaphore;
     VkSemaphore ImageAvailableSemaphores[MP_VK_FRAMES_IN_FLIGHT_MAX];
@@ -138,7 +150,7 @@ static void GetVertexAttributeDescriptions(VkVertexInputAttributeDescription att
     MP_ASSERT(size >= 3);
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;
-    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     attributeDescriptions[0].offset = offsetof(Vertex, Position);
     
     attributeDescriptions[1].binding = 0;

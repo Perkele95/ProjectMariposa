@@ -63,6 +63,8 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         input[0].Mouse.Wheel = 0;
     }
     
+    gameState->RenderData.CameraRotation.Z += timestep;
+    
     PROFILE_BLOCK_END_POINTER(GameUpdateAndRender);
     
     return &gameState->RenderData;

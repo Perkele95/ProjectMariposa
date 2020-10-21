@@ -21,7 +21,7 @@ inline internal MP_CONTROLLER_INPUT* GetController(MP_INPUT* input, int controll
 
 struct Vertex
 {
-    Vector2 Position;
+    Vector3 Position;
     Vector3 Colour;
     Vector2 TexCoord;
 };
