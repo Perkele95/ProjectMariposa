@@ -3,7 +3,5 @@ call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary
 set PATH=j:\source;%PATH%
 
 pushd ..\build
-devenv win32_mariposa.exe
+devenv project_mariposa.exe
 popd
-
-cd scripts

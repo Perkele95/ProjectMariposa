@@ -40,19 +40,19 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         {
             if(controller->Up.EndedDown)
             {
-                gameState->RenderData.CameraRotation.X += 2.0f * timestep;
+                gameState->RenderData.CameraRotation.X += timestep;
             }
             else if(controller->Down.EndedDown)
             {
-                gameState->RenderData.CameraRotation.X -= 2.0f * timestep;
+                gameState->RenderData.CameraRotation.X -= timestep;
             }
             if(controller->Left.EndedDown)
             {
-                gameState->RenderData.CameraRotation.Y += 2.0f * timestep;
+                gameState->RenderData.CameraRotation.Y += timestep;
             }
             else if(controller->Right.EndedDown)
             {
-                gameState->RenderData.CameraRotation.Y -= 2.0f * timestep;
+                gameState->RenderData.CameraRotation.Y -= timestep;
             }
         }
     }
@@ -62,8 +62,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         gameState->RenderData.CameraPosition.Y += (float)input[0].Mouse.Wheel * timestep;
         input[0].Mouse.Wheel = 0;
     }
-    
-    gameState->RenderData.CameraRotation.Z += timestep;
     
     PROFILE_BLOCK_END_POINTER(GameUpdateAndRender);
     
