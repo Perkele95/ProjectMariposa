@@ -3,7 +3,7 @@
 #include <windows.h>
 
 #include "..\Vulkan\Include\vulkan\vulkan.h"
-#include "pm_maths.h"
+#include "..\Vulkan\Include\vulkan\vulkan_win32.h"
 
 #define MP_INTERNAL 1
 #define MP_PERFORMANCE 0
@@ -27,6 +27,8 @@ typedef int32 bool32;
 
 #define true 1
 #define false 0
+
+#include "pm_maths.h"
 
 #if MP_PERFORMANCE
     #define MP_ASSERT(Expression)
@@ -93,6 +95,8 @@ typedef struct Renderer
     bool32 SeparatePresentQueue;
     bool32 IsMinimised;
     uint32 GpuNumber;
+    
+    bool32 SyncedWithActualPresents;
     
     uint64 RefreshDuration;
     uint64 RefreshDurationMultiplier;
