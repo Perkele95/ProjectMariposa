@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+static Win32WindowInfo GlobalWindowInfo = {0};
+
 static VkBool32 CheckLayers(uint32 checkCount, char* checkNames[], uint32 layerCount, VkLayerProperties *layers)
 {
     for(uint32 i = 0; i < checkCount; i++)
@@ -27,7 +29,7 @@ static VkBool32 CheckLayers(uint32 checkCount, char* checkNames[], uint32 layerC
     return true;
 }
 
-static void RendererVKInit(Renderer *renderer)
+static void RendererVKInit(Renderer *renderer, GameMemory* memory)
 {
     VkResult error;
     uint32 instanceExtensionCount = 0;
@@ -48,7 +50,7 @@ static void RendererVKInit(Renderer *renderer)
         if(instanceLayerCount > 0)
         {
             // TODO: replace with custom allocator to work with preallocated memory
-            VkLayerProperties *instanceLayers = malloc(sizeof(VkLayerProperties) * instanceLayerCount);
+            VkLayerProperties *instanceLayers = PushToStorage(memory, sizeof(VkLayerProperties) * instanceLayerCount);
             error = vkEnumerateInstanceLayerProperties(&instanceLayerCount, instanceLayers);
             MP_ASSERT(!error);
             
@@ -58,7 +60,7 @@ static void RendererVKInit(Renderer *renderer)
                 renderer->EnabledLayerCount = ArrayCount(instanceValidationLayers);
                 renderer->EnabledLayers[0] = "VK_LAYER_KHRONOS_validation";
             }
-            free(instanceLayers);
+            //free(instanceLayers);
         }
         
         if(!validationFound)
@@ -78,7 +80,7 @@ static void RendererVKInit(Renderer *renderer)
     if(instanceExtensionCount > 0)
     {
         // TODO: replace with custom allocator to work with preallocated memory
-        VkExtensionProperties *instanceExtensions = malloc(sizeof(VkExtensionProperties) * instanceExtensionCount);
+        VkExtensionProperties *instanceExtensions = PushToStorage(memory, sizeof(VkExtensionProperties) * instanceExtensionCount);
         error = vkEnumerateInstanceExtensionProperties(NULL, &instanceExtensionCount, instanceExtensions);
         MP_ASSERT(!error);
         
@@ -97,7 +99,6 @@ static void RendererVKInit(Renderer *renderer)
             }
             MP_ASSERT(renderer->EnabledExtensionCount < 64);
         }
-        free(instanceExtensions);
     }
     
     if(!surfaceExtensionFound)
@@ -141,7 +142,7 @@ static void RendererVKInit(Renderer *renderer)
     
     if(gpuCount > 0)
     {
-        VkPhysicalDevice *physicalDevices = malloc(sizeof(VkPhysicalDevice) * gpuCount);
+        VkPhysicalDevice *physicalDevices = PushToStorage(memory, sizeof(VkPhysicalDevice) * gpuCount);
         error = vkEnumeratePhysicalDevices(renderer->Instance, &gpuCount, physicalDevices);
         MP_ASSERT(!error);
         if(renderer->GpuNumber > gpuCount - 1)
@@ -151,7 +152,6 @@ static void RendererVKInit(Renderer *renderer)
             renderer->GpuNumber = 0;
         }
         renderer->Gpu = physicalDevices[renderer->GpuNumber];
-        free(physicalDevices);
     }
     else
     {
@@ -168,7 +168,7 @@ static void RendererVKInit(Renderer *renderer)
     
     if(deviceExtensionCount > 0)
     {
-        VkExtensionProperties *deviceExtensions = malloc(sizeof(VkExtensionProperties) * deviceExtensionCount);
+        VkExtensionProperties *deviceExtensions = PushToStorage(memory, sizeof(VkExtensionProperties) * deviceExtensionCount);
         error = vkEnumerateDeviceExtensionProperties(renderer->Gpu, NULL, &deviceExtensionCount, deviceExtensions);
         MP_ASSERT(!error);
         
@@ -180,9 +180,9 @@ static void RendererVKInit(Renderer *renderer)
                 renderer->ExtensionNames[renderer->EnabledExtensionCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
             }
             MP_ASSERT(renderer->EnabledExtensionCount < 64);
-        }
-        free(deviceExtensions);        
+        }   
     }
+    ResetStorage(memory);
     
     if(!SwapChainExtensionFound)
         OutputDebugStringA("vkEnumerateDeviceExtensionProperties failed to find the 'VK_KHR_swapchain' extension.\n\n");
@@ -191,7 +191,7 @@ static void RendererVKInit(Renderer *renderer)
     vkGetPhysicalDeviceQueueFamilyProperties(renderer->Gpu, &renderer->QueueFamilyCount, renderer->QueueProps);
 }
 
-static void RendererInit(Renderer *renderer)
+static void RendererInit(Renderer *renderer, GameMemory* memory)
 {
     Vec3 eye = {0.0f, 3.0f, 5.0f};
     Vec3 center = {0, 0, 0};
@@ -200,8 +200,9 @@ static void RendererInit(Renderer *renderer)
     renderer->PresentMode = VK_PRESENT_MODE_FIFO_KHR;
     renderer->FrameCount = INT32_MAX;
     renderer->GpuNumber = 0;
+    renderer->Validate = true;
     
-    RendererVKInit(renderer);
+    RendererVKInit(renderer, memory);
     
     renderer->Width = 1280;
     renderer->Height = 720;
@@ -213,12 +214,9 @@ static void RendererInit(Renderer *renderer)
     renderer->ModelMatrix = Mat4x4Identity();
 }
 
-static void InitMemory(GameMemory *memory)
+static void InitVkSwapChain(Renderer* renderer)
 {
-    memory->PermanentStorageSize = MegaBytes(64);
-    memory->TransientStorageSize = GigaBytes(1);
     
-    memory->PermanentStorage = VirtualAlloc(0, memory->PermanentStorageSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
 }
 
 inline internal LARGE_INTEGER Win32GetClockValue(void)
@@ -234,6 +232,87 @@ inline internal float Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER 
     return result;
 }
 
+static void InitMemory(GameMemory *memory)
+{
+    memory->PermanentStorageSize = MegaBytes(64);
+    memory->DynamicStorageSize = GigaBytes(1);
+    uint64 totalSize = memory->PermanentStorageSize + memory->DynamicStorageSize;
+    
+    #if MP_INTERNAL
+        LPVOID baseAddress = (LPVOID)TeraBytes(2);
+    #else
+        LPVOID baseAddress = 0;
+    #endif
+    
+    memory->PermanentStorage = VirtualAlloc(baseAddress, totalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    memory->DynamicStorage = ((uint8*)memory->PermanentStorage + memory->PermanentStorageSize);
+    memory->DynamicStorageCurrent = memory->DynamicStorage;
+}
+
+LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    LRESULT result = 0;
+    
+    switch (message)
+    {
+        case WM_SIZE:
+        {
+            GlobalWindowInfo.Width = (int32)(lParam & 0x0000FFFF);
+            GlobalWindowInfo.Height = (int32)(lParam >> 16);
+            GlobalWindowInfo.WindowResized = true;
+        } break;
+
+        case WM_CLOSE:
+        {
+            GlobalWindowInfo.Running = false;
+        } break;
+
+        case WM_DESTROY:
+        {
+            GlobalWindowInfo.Running = false;
+        } break;
+        
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_KEYDOWN:
+        case WM_KEYUP:
+        {
+            MP_ASSERT(!"Keyboard input came in through a non-dispatch message!");
+        } break;
+
+        default:
+        {
+            result = DefWindowProc(window, message, wParam, lParam);
+        } break;
+    }
+
+    return result;
+}
+
+static void Win32CreateWindow(Renderer* renderer)
+{
+    WNDCLASSA windowClass = {0};
+    windowClass.style = CS_HREDRAW | CS_VREDRAW;
+    windowClass.lpfnWndProc = Win32MainWindowCallback;
+    windowClass.hInstance = renderer->HInstance;
+    //WindowClass.hIcon;
+    windowClass.lpszClassName = "MariposaWindowClass";
+    
+    if(!RegisterClassA(&windowClass))
+        OutputDebugString("Application window class register failed\n");
+    
+    renderer->Window = CreateWindowExA(0, windowClass.lpszClassName, "Mariposa",
+                                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+                                CW_USEDEFAULT, CW_USEDEFAULT,
+                                CW_USEDEFAULT, CW_USEDEFAULT,
+                                0, 0, renderer->HInstance, 0);
+    
+    if(renderer->Window)
+        GlobalWindowInfo.Running = true;
+    else
+        OutputDebugString("Application window creation failed\n");
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
 {
     GameMemory memory = {0};
@@ -244,24 +323,30 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     LARGE_INTEGER perfCountFrequencyResult;
     QueryPerformanceFrequency(&perfCountFrequencyResult);
     
-    bool32 running = true;
     bool32 pause = false;
     
     if(memory.PermanentStorage)
     {
         LARGE_INTEGER lastCounter = Win32GetClockValue();
-        float timestep = 0.001f;
     
-        RendererInit(renderer);
+        RendererInit(renderer, &memory);
+        renderer->HInstance = hInstance;
+        Win32CreateWindow(renderer);
+        InitVkSwapChain(renderer);
         
-        while(running)
+        while(GlobalWindowInfo.Running)
         {
+            // Peekmessage
             
+            // UpdateTick
+            // RenderTick
             
             LARGE_INTEGER endCounter = Win32GetClockValue();
-            timestep = Win32GetSecondsElapsed(lastCounter, endCounter, perfCountFrequencyResult);
+            renderer->Timestep = Win32GetSecondsElapsed(lastCounter, endCounter, perfCountFrequencyResult);
             lastCounter = endCounter;
         }
+        
+        // VkCleanup
     }
     
     return 0;

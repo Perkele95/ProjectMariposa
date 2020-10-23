@@ -54,8 +54,10 @@ typedef struct GameMemory
     uint64 PermanentStorageSize;
     void* PermanentStorage;
     
-    uint64 TransientStorageSize;
-    void* TransientStorage;
+    uint64 DynamicStorageSize;
+    void* DynamicStorage;
+    uint64 DynamicStorageCurrentSize;
+    void* DynamicStorageCurrent;
 } GameMemory;
 
 typedef struct {
@@ -100,7 +102,7 @@ typedef struct Renderer
     
     uint64 RefreshDuration;
     uint64 RefreshDurationMultiplier;
-    uint64 Timestep;  // image present duration (inverse of frame rate)
+    float Timestep;  // image present duration (inverse of frame rate)
     uint64 PrevDesiredPresentTime;
     uint32 NextPresentID;
     uint32 LastEarlyID;  // 0 if no early images
@@ -180,3 +182,30 @@ typedef struct Renderer
     uint32 CurrentBuffer;
     uint32 QueueFamilyCount;
 } Renderer;
+
+typedef struct Win32WindowInfo
+{
+    int32 Width;
+    int32 Height;
+    bool32 Running;
+    bool32 WindowResized;
+} Win32WindowInfo;
+
+// Returns a pointer to a some block of memory in 'storage' and increments storage past this block
+inline static void* PushToStorage(GameMemory* memory, uint64 allocSize)
+{
+    // TODO: implement good dynamic memory pushing/popping
+    void* allocation = memory->DynamicStorageCurrent;
+    memory->DynamicStorageCurrent = (uint8*)memory->DynamicStorageCurrent + allocSize;
+    memory->DynamicStorageCurrentSize += allocSize;
+    
+    return allocation;
+}
+
+// Zeroes out the storage memory and resets the current pointer
+inline static void ResetStorage(GameMemory* memory)
+{
+    memset(memory->DynamicStorage, 0, memory->DynamicStorageCurrentSize);
+    memory->DynamicStorageCurrent = memory->DynamicStorage;
+    memory->DynamicStorageCurrentSize = 0;
+}
