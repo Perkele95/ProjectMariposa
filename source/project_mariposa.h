@@ -45,6 +45,7 @@ typedef int32 bool32;
 
 #define FRAME_LAG 2
 #define TEXTURE_COUNT 1
+static const char* gTexFiles[] = {"../assets/shia.bmp"};
 
 // --------------------
 // --------------------
@@ -127,7 +128,7 @@ typedef struct Renderer
     char *ExtensionNames[64];
     char *EnabledLayers[64];
     
-    int Width, Height;
+    uint32 Width, Height;
     VkFormat Format;
     VkColorSpaceKHR ColorSpace;
     
@@ -208,4 +209,15 @@ inline static void ResetStorage(GameMemory* memory)
     memset(memory->DynamicStorage, 0, memory->DynamicStorageCurrentSize);
     memory->DynamicStorageCurrent = memory->DynamicStorage;
     memory->DynamicStorageCurrentSize = 0;
+}
+
+inline static uint32 Uint32Clamp(uint32 value, uint32 min, uint32 max)
+{
+    MP_ASSERT(min < max);
+    if(value < min)
+        return min;
+    if(value > max)
+        return max;
+    
+    return value;
 }
