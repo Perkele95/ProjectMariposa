@@ -899,8 +899,8 @@ static void CopyBufferToImage(const VulkanData* vkData, VkBuffer buffer, uint32 
 
 static void CreateTextureImage(VulkanData* vkData)
 {
-    int texWidth, texHeight, texChannels;
-    uint8* pixels = stbi_load("../assets/shia.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    int texWidth, texHeight;
+    uint8* pixels = stbi_load("../assets/dirt.png", &texWidth, &texHeight, nullptr, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;  // 4 = bytes per pixel
 
     VkBuffer stagingbuffer;

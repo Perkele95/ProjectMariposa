@@ -34,7 +34,7 @@ typedef struct BMP_HEADER
 } BMP_HEADER;
 #pragma pack(pop)
 
-inline static uint32 SafeTruncateUint32(uint64 value)
+inline static uint32 safe_truncate_uint32(uint64 value)
 {
     if(!(value < 0xffffffff))
         DebugBreak();
@@ -58,7 +58,7 @@ static FILE_RESULT Win32_Read(const char* filename)
         LARGE_INTEGER fileSize;
         if(GetFileSizeEx(fileHandle, &fileSize))
         {
-            uint32 fileSize32 = SafeTruncateUint32(fileSize.QuadPart);
+            uint32 fileSize32 = safe_truncate_uint32(fileSize.QuadPart);
             result.data = VirtualAlloc(0, (size_t)fileSize.QuadPart, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             if(result.data)
             {
@@ -93,32 +93,6 @@ static FILE_RESULT Win32_Read(const char* filename)
     return result;
 }
 
-bool32 Win32_Write(const char* filename, FILE_RESULT* readData)
-{
-    bool32 result = false;
-    void* fileHandle = CreateFileA(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
-    if(fileHandle != INVALID_HANDLE_VALUE)
-    {
-        DWORD bytesWritten;
-        if(WriteFile(fileHandle, readData->data, readData->dataSize, &bytesWritten, 0))
-        {
-            result = (readData->dataSize == bytesWritten);
-        }
-        else
-        {
-            // TODO: Log Error
-        }
-        
-        CloseHandle(fileHandle);
-    }
-    else
-    {
-        // TODO: Log Error
-    }
-    
-    return result;
-}
-
 uint8* LoadBMP(const char* filename, int32* texWidth, int32* texHeight)
 {
     FILE_RESULT readResult = Win32_Read(filename);
@@ -131,6 +105,18 @@ uint8* LoadBMP(const char* filename, int32* texWidth, int32* texHeight)
         *texHeight = header->Height;
         
         result = (uint8*) readResult.data + header->BitmapOffset;
+        
+        uint32* sourceDest = (uint32*)result;
+        for(int32 y = 0; y < header->Height; y++)
+        {
+            for(int32 x = 0; x < header->Width; x++)
+            {
+                //*sourceDest = (*sourceDest >> 8) | (*sourceDest << 16);
+                sourceDest++;
+            }
+        }
+        
     }
+    
     return result;
 }

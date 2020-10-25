@@ -72,15 +72,6 @@ const uint16 gIndices[] = {
     20, 21, 22, 22, 23, 20 // WEST
 };
 
-const uint16 gIndices_old[] = {
-    0, 1, 2, 2, 3, 0, // TOP
-    7, 6, 5, 5, 4, 7, // BOTTOM
-    8, 9, 10, 10, 11, 8, // NORTH
-    15, 14, 13, 13, 12, 15, // SOUTH
-    16, 17, 18, 18, 19, 16, // EAST
-    23, 22, 21, 21, 20, 23 // WEST
-};
-
 struct UniformbufferObject
 {
     alignas(16) Mat4 Model;
