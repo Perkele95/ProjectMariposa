@@ -59,9 +59,10 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     
     if(input[0].Mouse.Wheel)
     {
-        gameState->RenderData.CameraPosition.Y += (float)input[0].Mouse.Wheel * timestep;
-        input[0].Mouse.Wheel = 0;
+        // mouse wheel
     }
+    
+    gameState->RenderData.CameraRotation.Z += timestep;
     
     PROFILE_BLOCK_END_POINTER(GameUpdateAndRender);
     

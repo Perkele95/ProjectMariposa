@@ -894,6 +894,344 @@ static void PrepareTextures(Renderer* renderer)
     }
 }
 
+static void PrepareCubeDataBuffers(Renderer* renderer)
+{
+    VkResult error;
+    bool32 success;
+    Mat4x4 ModelViewProj, ViewProj;
+    TexCubeVsUniform data;
+    
+    ViewProj = Mat4x4x4Mult(renderer->ProjectionMatrix, renderer->ViewMatrix);
+    ModelViewProj = Mat4x4x4Mult(ViewProj, renderer->ModelMatrix);
+    memcpy(data.mvp, ModelViewProj.data, sizeof(ModelViewProj.data));
+    
+    for(uint32 i = 0; i < 12 * 3; i++)
+    {
+        data.position[i][0] = gVertexData[i * 3];
+        data.position[i][1] = gVertexData[i * 3 + 1];
+        data.position[i][2] = gVertexData[i * 3 + 2];
+        data.position[i][3] = 1.0f;
+        data.attr[i][0] = gUVdata[i * 2];
+        data.attr[i][0] = gUVdata[i * 2 + 1];
+        data.attr[i][0] = 0.0f;
+        data.attr[i][0] = 0.0f;
+    }
+    VkBufferCreateInfo bufferInfo = {0};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    bufferInfo.size = sizeof(data);
+    
+    VkMemoryRequirements memReqs;
+    VkMemoryAllocateInfo memAlloc;
+    
+    for(uint32 i = 0; i < renderer->SwapChainImageCount; i++)
+    {
+        error = vkCreateBuffer(renderer->Device, &bufferInfo, NULL, &renderer->SwapchainImageResources[i].Uniformbuffer);
+        MP_ASSERT(!error);
+        
+        vkGetBufferMemoryRequirements(renderer->Device, renderer->SwapchainImageResources[i].Uniformbuffer, &memReqs);
+        
+        memAlloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        memAlloc.pNext = NULL;
+        memAlloc.allocationSize = memReqs.size;
+        memAlloc.memoryTypeIndex = 0;
+        
+        success = MemoryTypeFromProps(renderer, memReqs.memoryTypeBits,
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                      &memAlloc.memoryTypeIndex);
+        MP_ASSERT(success);
+        
+        error = vkAllocateMemory(renderer->Device, &memAlloc, NULL, &renderer->SwapchainImageResources[i].UniformMemory);
+        MP_ASSERT(!error);
+        
+        error = vkMapMemory(renderer->Device, renderer->SwapchainImageResources[i].UniformMemory, 0, VK_WHOLE_SIZE, 0,
+                            &renderer->SwapchainImageResources[i].UniformMemoryPtr);
+        MP_ASSERT(!error);
+        
+        memcpy(renderer->SwapchainImageResources[i].UniformMemoryPtr, &data, sizeof(data));
+        error = vkBindBufferMemory(renderer->Device, renderer->SwapchainImageResources[i].Uniformbuffer,
+                                   renderer->SwapchainImageResources[i].UniformMemory, 0);
+        MP_ASSERT(!error);
+    }
+}
+
+static void PrepareDescriptorLayout(Renderer* renderer)
+{
+    VkResult error;
+    
+    const VkDescriptorSetLayoutBinding layoutBindings[2] = {
+        [0] = {
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .pImmutableSamplers = NULL
+        },
+        [1] = {
+            .binding = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = TEXTURE_COUNT,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .pImmutableSamplers = NULL
+        }
+    };
+    const VkDescriptorSetLayoutCreateInfo layoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .bindingCount = ArrayCount(layoutBindings),
+        .pBindings = layoutBindings        
+    };
+    
+    error = vkCreateDescriptorSetLayout(renderer->Device, &layoutInfo, NULL, &renderer->DescLayout);
+    MP_ASSERT(!error);
+    
+    const VkPipelineLayoutCreateInfo pipelineLayoutInfo = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .setLayoutCount = 1,
+        .pSetLayouts = &renderer->DescLayout
+    };
+    
+    error = vkCreatePipelineLayout(renderer->Device, &pipelineLayoutInfo, NULL, &renderer->PipelineLayout);
+    MP_ASSERT(!error);
+}
+
+static void PrepareRenderPass(Renderer* renderer)
+{
+    const VkAttachmentDescription attachments[] = {
+        [0] = {
+            .format = renderer->Format,
+            .flags = 0,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+        },
+        [1] = {
+            .format = renderer->Depth.Format,
+            .flags = 0,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        }
+    };
+    const VkAttachmentReference colorRef = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+    const VkAttachmentReference depthRef = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+    const VkSubpassDescription subPass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .flags = 0,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = NULL,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &colorRef,
+        .pResolveAttachments = NULL,
+        .pDepthStencilAttachment = &depthRef,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = NULL,
+    };
+    
+    VkSubpassDependency attachmentDependencies[] = {
+        [0] = {
+            .srcSubpass = VK_SUBPASS_EXTERNAL,
+            .dstSubpass = 0,
+            .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+            .srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            .dependencyFlags = 0
+        },
+        [1] = {
+            .srcSubpass = VK_SUBPASS_EXTERNAL,
+            .dstSubpass = 0,
+            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask = 0,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+            .dependencyFlags = 0
+        }
+    };
+    
+    const VkRenderPassCreateInfo renderPassInfo = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .attachmentCount = ArrayCount(attachments),
+        .pAttachments = attachments,
+        .subpassCount = 1,
+        .pSubpasses = &subPass,
+        .dependencyCount = ArrayCount(attachmentDependencies),
+        .pDependencies = attachmentDependencies
+    };
+    
+    VkResult error;
+    error = vkCreateRenderPass(renderer->Device, &renderPassInfo, NULL, &renderer->RenderPass);
+    MP_ASSERT(!error);
+}
+
+static VkShaderModule PrepareShaderModule(Renderer* renderer, const char* filename)
+{
+    VkResult error;
+    VkShaderModule module;
+    FILE_RESULT fileResult = Win32_Read(filename);
+    MP_ASSERT(fileResult.dataSize);
+    
+    VkShaderModuleCreateInfo moduleInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .codeSize = fileResult.dataSize,
+        .pCode = fileResult.data
+    };
+    
+    error = vkCreateShaderModule(renderer->Device, &moduleInfo, NULL, &module);
+    MP_ASSERT(!error);
+    
+    return module;
+}
+
+static void PreparePipeline(Renderer* renderer)
+{
+    VkResult error;
+    VkDynamicState dynamicStates[2] = {0};
+    VkPipelineDynamicStateCreateInfo dynamicState = {0};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.pDynamicStates = dynamicStates;
+    
+    VkPipelineVertexInputStateCreateInfo vertexInputState = {0};
+    vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {0};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    
+    VkPipelineRasterizationStateCreateInfo rasteriser = {0};
+    rasteriser.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasteriser.polygonMode = VK_POLYGON_MODE_FILL;
+    rasteriser.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasteriser.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasteriser.depthClampEnable = VK_FALSE;
+    rasteriser.rasterizerDiscardEnable = VK_FALSE;
+    rasteriser.depthBiasEnable = VK_FALSE;
+    rasteriser.lineWidth = 1.0f;
+    
+    VkPipelineColorBlendAttachmentState colorBlendAttachment = {0};
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE;
+    
+    VkPipelineColorBlendStateCreateInfo colorBlend = {0};
+    colorBlend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlend.attachmentCount = 1;
+    colorBlend.pAttachments = &colorBlendAttachment;
+    
+    VkPipelineViewportStateCreateInfo viewport = {0};
+    viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewport.viewportCount = 1;
+    dynamicStates[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
+    viewport.scissorCount = 1;
+    dynamicStates[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
+    
+    VkPipelineDepthStencilStateCreateInfo depthStencil = {0};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.back.failOp = VK_STENCIL_OP_KEEP;
+    depthStencil.back.passOp = VK_STENCIL_OP_KEEP;
+    depthStencil.back.compareOp = VK_COMPARE_OP_ALWAYS;
+    depthStencil.stencilTestEnable = VK_FALSE;
+    depthStencil.front = depthStencil.back;
+    
+    VkPipelineMultisampleStateCreateInfo multiSampler = {0};
+    multiSampler.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multiSampler.pSampleMask = NULL;
+    multiSampler.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    
+    renderer->VertShaderModule = PrepareShaderModule(renderer, gVertexShaderPath);
+    renderer->FragShaderModule = PrepareShaderModule(renderer, gFragmentShaderPath);
+    
+    VkPipelineShaderStageCreateInfo shaderStages[2] = {0};
+    shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    shaderStages[0].module = renderer->VertShaderModule;
+    shaderStages[0].pName = "main";
+    
+    shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    shaderStages[1].module = renderer->FragShaderModule;
+    shaderStages[1].pName = "main";
+    
+    VkPipelineCacheCreateInfo pipelineCache = {0};
+    pipelineCache.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    
+    error = vkCreatePipelineCache(renderer->Device, &pipelineCache, NULL, &renderer->PipelineCache);
+    MP_ASSERT(!error);
+    
+    VkGraphicsPipelineCreateInfo pipeline = {0};
+    pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipeline.layout = renderer->PipelineLayout;
+    pipeline.pVertexInputState = &vertexInputState;
+    pipeline.pInputAssemblyState = &inputAssembly;
+    pipeline.pRasterizationState = &rasteriser;
+    pipeline.pColorBlendState = &colorBlend;
+    pipeline.pMultisampleState = &multiSampler;
+    pipeline.pViewportState = &viewport;
+    pipeline.pDepthStencilState = &depthStencil;
+    pipeline.stageCount = ArrayCount(shaderStages);
+    pipeline.pStages = shaderStages;
+    pipeline.renderPass = renderer->RenderPass;
+    pipeline.pDynamicState = &dynamicState;
+    
+    error = vkCreateGraphicsPipelines(renderer->Device, renderer->PipelineCache, 1, &pipeline, NULL, &renderer->Pipeline);
+    MP_ASSERT(!error);
+    
+    vkDestroyShaderModule(renderer->Device, renderer->FragShaderModule, NULL);
+    vkDestroyShaderModule(renderer->Device, renderer->VertShaderModule, NULL);
+}
+
+static void BuildImageOwnershipCmd(Renderer* renderer, int i)
+{
+    VkResult error;
+    
+    const VkCommandBufferBeginInfo cmdBufferInfo = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+        .pInheritanceInfo = NULL
+    };
+    error = vkBeginCommandBuffer(renderer->SwapchainImageResources[i].GraphicsToPresentCmd, &cmdBufferInfo);
+    MP_ASSERT(!error);
+    
+    VkImageMemoryBarrier imageOwnershipBarrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = 0,
+        .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = renderer->GraphicsQueueFamilyIndex,
+        .dstQueueFamilyIndex = renderer->PresentQueueFamilyIndex,
+        .image = renderer->SwapchainImageResources[i].Image,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}
+    };
+    vkCmdPipelineBarrier(renderer->SwapchainImageResources[i].GraphicsToPresentCmd, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1, &imageOwnershipBarrier);
+    error = vkEndCommandBuffer(renderer->SwapchainImageResources[i].GraphicsToPresentCmd);
+    MP_ASSERT(!error);
+}
+
 static void PrepareforRendering(Renderer* renderer, GameMemory* memory)
 {
     VkResult error;
@@ -938,6 +1276,44 @@ static void PrepareforRendering(Renderer* renderer, GameMemory* memory)
     
     PrepareDepth(renderer);
     PrepareTextures(renderer);
+    PrepareCubeDataBuffers(renderer);
+    
+    PrepareDescriptorLayout(renderer);
+    PrepareRenderPass(renderer);
+    PreparePipeline(renderer);
+    
+    for(uint32 i = 0; i < renderer->SwapChainImageCount; i++)
+    {
+        error = vkAllocateCommandBuffers(renderer->Device, &cmd, &renderer->SwapchainImageResources[i].Cmd);
+        MP_ASSERT(!error);
+    }
+    
+    if(renderer->SeparatePresentQueue)
+    {
+        const VkCommandPoolCreateInfo presentCmdPoolInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = NULL,
+            .queueFamilyIndex = renderer->PresentQueueFamilyIndex,
+            .flags = 0
+        };
+        error = vkCreateCommandPool(renderer->Device, &presentCmdPoolInfo, NULL, &renderer->PresentCommandPool);
+        MP_ASSERT(!error);
+        
+        const VkCommandBufferAllocateInfo presentCmdAllocInfo = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = NULL,
+            .commandPool = renderer->PresentCommandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1
+        };
+        
+        for(uint32 i = 0; i < renderer->SwapChainImageCount; i++)
+        {
+            error = vkAllocateCommandBuffers(renderer->Device, &presentCmdAllocInfo, &renderer->SwapchainImageResources[i].GraphicsToPresentCmd);
+            MP_ASSERT(!error);
+            BuildImageOwnershipCmd(renderer, i);
+        }
+    }
     
     
     // CONT

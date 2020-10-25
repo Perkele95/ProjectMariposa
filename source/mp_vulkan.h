@@ -20,58 +20,66 @@ const bool32 enableValidationLayers = true;
 const bool32 enableValidationLayers = false;
 #endif
 
-#define V0 {-0.5f, -0.5f, 0.0f}
-#define V1 {0.5f, -0.5f, 0.0f}
-#define V2 {0.5f, 0.5f, 0.0f}
-#define V3 {-0.5f, 0.5f, 0.0f}
+#define V0 {-0.5f, -0.5f, 0.5f}
+#define V1 {0.5f, -0.5f, 0.5f}
+#define V2 {0.5f, 0.5f, 0.5f}
+#define V3 {-0.5f, 0.5f, 0.5f}
 
 #define V4 {-0.5f, -0.5f, -0.5f}
 #define V5 {0.5f, -0.5f, -0.5f}
 #define V6 {0.5f, 0.5f, -0.5f}
 #define V7 {-0.5f, 0.5f, -0.5f}
-// TOP:BOTTOM:NORTH:SOUTH:EAST:WEST
+
+/*  COUNTER CLOCK-WISE MAPPING! */
 const Vertex gVertices[] = {
-    {V0, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {V0, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // TOP
     {V1, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
     {V2, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
     {V3, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
     
-    {V7, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {V7, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // BOTTOM
     {V6, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
     {V5, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
     {V4, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
     
-    {V2, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {V1, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {V5, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {V6, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-    
-    {V0, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {V3, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-    {V7, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {V4, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-    
-    {V3, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {V2, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {V1, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // NORTH
+    {V5, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
     {V6, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {V7, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    {V2, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
     
-    {V1, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-    {V0, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {V3, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // SOUTH
+    {V7, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
     {V4, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {V5, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+    {V0, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    
+    {V2, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // EAST
+    {V6, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {V7, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {V3, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    
+    {V0, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}}, // WEST
+    {V4, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+    {V5, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {V1, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
 };
 
 const uint16 gIndices[] = {
-    0, 1, 2, 2, 3, 0,
-    7, 6, 5, 5, 4, 7,
-    2, 1, 5, 5, 6, 2,
-    0, 3, 7, 7, 4, 0,
-    3, 2, 6, 6, 7, 3,
-    1, 0, 4, 4, 5, 1
+    0, 1, 2, 2, 3, 0, // TOP
+    4, 5, 6, 6, 7, 4, // BOTTOM
+    8, 9, 10, 10, 11, 8, // NORTH
+    12, 13, 14, 14, 15, 12, // SOUTH
+    16, 17, 18, 18, 19, 16, // EAST
+    20, 21, 22, 22, 23, 20 // WEST
 };
 
-static float GlobalRotation = 0.0f;
+const uint16 gIndices_old[] = {
+    0, 1, 2, 2, 3, 0, // TOP
+    7, 6, 5, 5, 4, 7, // BOTTOM
+    8, 9, 10, 10, 11, 8, // NORTH
+    15, 14, 13, 13, 12, 15, // SOUTH
+    16, 17, 18, 18, 19, 16, // EAST
+    23, 22, 21, 21, 20, 23 // WEST
+};
 
 struct UniformbufferObject
 {
@@ -194,6 +202,6 @@ static void GetVertexAttributeDescriptions(VkVertexInputAttributeDescription att
     
     attributeDescriptions[2].binding = 0;
     attributeDescriptions[2].location = 2;
-    attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
     attributeDescriptions[2].offset = offsetof(Vertex, TexCoord);
 }

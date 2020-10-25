@@ -47,6 +47,8 @@ typedef int32 bool32;
 #define TEXTURE_COUNT 1
 static const char* gTexFiles[] = {"../assets/shia.bmp"};
 
+static const char* gVertexShaderPath = {"../source/Shaders/vert.spv"};
+static const char* gFragmentShaderPath = {"../source/Shaders/frag.spv"};
 // --------------------
 // --------------------
 
@@ -183,6 +185,101 @@ typedef struct Renderer
     uint32 CurrentBuffer;
     uint32 QueueFamilyCount;
 } Renderer;
+
+typedef struct TexCubeVsUniform
+{
+    float mvp[4][4];
+    float position[12 * 3][4];
+    float attr[12 * 3][4];
+} TexCubeVsUniform;
+
+static const float gVertexData[] =  {
+    -1.0f,-1.0f,-1.0f,  // -X side
+    -1.0f,-1.0f, 1.0f,
+    -1.0f, 1.0f, 1.0f,
+    -1.0f, 1.0f, 1.0f,
+    -1.0f, 1.0f,-1.0f,
+    -1.0f,-1.0f,-1.0f,
+
+    -1.0f,-1.0f,-1.0f,  // -Z side
+     1.0f, 1.0f,-1.0f,
+     1.0f,-1.0f,-1.0f,
+    -1.0f,-1.0f,-1.0f,
+    -1.0f, 1.0f,-1.0f,
+     1.0f, 1.0f,-1.0f,
+
+    -1.0f,-1.0f,-1.0f,  // -Y side
+     1.0f,-1.0f,-1.0f,
+     1.0f,-1.0f, 1.0f,
+    -1.0f,-1.0f,-1.0f,
+     1.0f,-1.0f, 1.0f,
+    -1.0f,-1.0f, 1.0f,
+
+    -1.0f, 1.0f,-1.0f,  // +Y side
+    -1.0f, 1.0f, 1.0f,
+     1.0f, 1.0f, 1.0f,
+    -1.0f, 1.0f,-1.0f,
+     1.0f, 1.0f, 1.0f,
+     1.0f, 1.0f,-1.0f,
+
+     1.0f, 1.0f,-1.0f,  // +X side
+     1.0f, 1.0f, 1.0f,
+     1.0f,-1.0f, 1.0f,
+     1.0f,-1.0f, 1.0f,
+     1.0f,-1.0f,-1.0f,
+     1.0f, 1.0f,-1.0f,
+
+    -1.0f, 1.0f, 1.0f,  // +Z side
+    -1.0f,-1.0f, 1.0f,
+     1.0f, 1.0f, 1.0f,
+    -1.0f,-1.0f, 1.0f,
+     1.0f,-1.0f, 1.0f,
+     1.0f, 1.0f, 1.0f,
+};
+
+static const float gUVdata[] = {
+    0.0f, 1.0f,  // -X side
+    1.0f, 1.0f,
+    1.0f, 0.0f,
+    1.0f, 0.0f,
+    0.0f, 0.0f,
+    0.0f, 1.0f,
+
+    1.0f, 1.0f,  // -Z side
+    0.0f, 0.0f,
+    0.0f, 1.0f,
+    1.0f, 1.0f,
+    1.0f, 0.0f,
+    0.0f, 0.0f,
+
+    1.0f, 0.0f,  // -Y side
+    1.0f, 1.0f,
+    0.0f, 1.0f,
+    1.0f, 0.0f,
+    0.0f, 1.0f,
+    0.0f, 0.0f,
+
+    1.0f, 0.0f,  // +Y side
+    0.0f, 0.0f,
+    0.0f, 1.0f,
+    1.0f, 0.0f,
+    0.0f, 1.0f,
+    1.0f, 1.0f,
+
+    1.0f, 0.0f,  // +X side
+    0.0f, 0.0f,
+    0.0f, 1.0f,
+    0.0f, 1.0f,
+    1.0f, 1.0f,
+    1.0f, 0.0f,
+
+    0.0f, 0.0f,  // +Z side
+    0.0f, 1.0f,
+    1.0f, 0.0f,
+    0.0f, 1.0f,
+    1.0f, 1.0f,
+    1.0f, 0.0f,
+};
 
 typedef struct Win32WindowInfo
 {

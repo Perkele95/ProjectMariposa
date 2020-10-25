@@ -1248,7 +1248,7 @@ static void UpdateUniformbuffer(uint32 currentImage, VulkanData* vkData, MP_REND
 {
     UniformbufferObject ubo = {};
 
-    ubo.Model = Mat4RotateZ(0.0f);
+    ubo.Model = Mat4RotateZ(renderData->CameraRotation.Z);
     ubo.View = LookAt(renderData->CameraPosition, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}) * Mat4RotateX(renderData->CameraRotation.X) * Mat4RotateY(renderData->CameraRotation.Y);
     ubo.Proj = Perspective(PI32 / 4.0f, (float)vkData->SwapChainExtent.width / (float)vkData->SwapChainExtent.height, 0.1f, 10.0f);
 

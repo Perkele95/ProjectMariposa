@@ -12,11 +12,11 @@ typedef int int32;
 typedef long long int64;
 typedef int32 bool32;
 
-typedef struct BMP_FILE_RESULT
+typedef struct FILE_RESULT
 {
     void* data;
     uint32 dataSize;
-} BMP_FILE_RESULT;
+} FILE_RESULT;
 
 #pragma pack(push, 1)
 typedef struct BMP_HEADER
@@ -43,14 +43,14 @@ inline static uint32 SafeTruncateUint32(uint64 value)
 
 // IMPLEMENTATION
 
-static void FreeBMP(void* memory)
+void FreeBMP(void* memory)
 {
     VirtualFree(memory, 0, MEM_RELEASE);
 }
 
-static BMP_FILE_RESULT ReadBMP(const char* filename)
+static FILE_RESULT Win32_Read(const char* filename)
 {
-    BMP_FILE_RESULT result = {0};
+    FILE_RESULT result = {0};
     
     void* fileHandle = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
     if(fileHandle != INVALID_HANDLE_VALUE)
@@ -93,9 +93,35 @@ static BMP_FILE_RESULT ReadBMP(const char* filename)
     return result;
 }
 
+bool32 Win32_Write(const char* filename, FILE_RESULT* readData)
+{
+    bool32 result = false;
+    void* fileHandle = CreateFileA(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
+    if(fileHandle != INVALID_HANDLE_VALUE)
+    {
+        DWORD bytesWritten;
+        if(WriteFile(fileHandle, readData->data, readData->dataSize, &bytesWritten, 0))
+        {
+            result = (readData->dataSize == bytesWritten);
+        }
+        else
+        {
+            // TODO: Log Error
+        }
+        
+        CloseHandle(fileHandle);
+    }
+    else
+    {
+        // TODO: Log Error
+    }
+    
+    return result;
+}
+
 uint8* LoadBMP(const char* filename, int32* texWidth, int32* texHeight)
 {
-    BMP_FILE_RESULT readResult = ReadBMP(filename);
+    FILE_RESULT readResult = Win32_Read(filename);
     uint8* result = 0;
     
     if(readResult.dataSize > 0)
