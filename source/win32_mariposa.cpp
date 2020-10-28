@@ -10,7 +10,9 @@
 
 #include "mp_vulkan.cpp"
 
-#define PROFILER_ENABLE
+#if MP_INTERNAL
+    #define PROFILER_ENABLE
+#endif
 #include "profiler.h"
 
 // TODO: UNglobal these:
@@ -439,81 +441,6 @@ internal float Win32ProcessXInputStickPosition(short value, short deadZoneThresh
     return result;
 }
 
-internal void Win32GetInputFileLocation(Win32State* state, bool32 isInputStream, int slotIndex, char* dest, int destCount)
-{
-    char temp[64];
-    wsprintfA(temp, "input_recording_%s_%d.mpr", (isInputStream ? "input" : "state"), slotIndex);
-    Win32BuildEXEFilepathName(state, temp, dest, destCount);
-}
-
-internal Win32ReplayBuffer* Win32GetReplayBuffer(Win32State* state, uint32 index)
-{
-    MP_ASSERT(index < ArrayCount(state->ReplayBuffers))
-    Win32ReplayBuffer* result = &state->ReplayBuffers[index];
-    return result;
-}
-
-internal void Win32BeginInputRecording(Win32State* state, int inputRecordingIndex)
-{
-    Win32ReplayBuffer* replayBuffer = Win32GetReplayBuffer(state, inputRecordingIndex);
-    if(replayBuffer->Data)
-    {
-        state->InputRecordingIndex = inputRecordingIndex;
-        char filename[MAX_PATH];
-        Win32GetInputFileLocation(state, true, inputRecordingIndex, filename, sizeof(filename));
-        state->RecordingHandle = CreateFileA(filename, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, 0, 0);
-        
-        memcpy(replayBuffer->Data, state->GameMemoryBlock, state->TotalSize);
-    }
-}
-
-internal void Win32EndInputRecording(Win32State* state)
-{
-    CloseHandle(state->RecordingHandle);
-    state->InputRecordingIndex = 0;
-}
-
-internal void Win32BeginInputPlayback(Win32State* state, int inputPlaybackIndex)
-{
-    Win32ReplayBuffer* replayBuffer = Win32GetReplayBuffer(state, inputPlaybackIndex);
-    if(replayBuffer->Data)
-    {
-        state->InputPlaybackIndex = inputPlaybackIndex;
-        char filename[MAX_PATH];
-        Win32GetInputFileLocation(state, true, inputPlaybackIndex, filename, sizeof(filename));
-        state->PlaybackHandle = CreateFileA(filename, GENERIC_READ, 0, 0, OPEN_EXISTING, 0, 0);
-        
-        memcpy(state->GameMemoryBlock, replayBuffer->Data, state->TotalSize);
-    }
-}
-
-internal void Win32EndInputPlayback(Win32State* state)
-{
-    CloseHandle(state->PlaybackHandle);
-    state->InputPlaybackIndex = 0;
-}
-
-internal void Win32RecordInput(Win32State* state, MP_INPUT* newInput)
-{
-    DWORD bytesWritten = 0;
-    WriteFile(state->RecordingHandle, newInput, sizeof(*newInput), &bytesWritten, 0);
-}
-
-internal void Win32PlaybackInput(Win32State* state, MP_INPUT* newInput)
-{
-    DWORD bytesRead = 0;
-    if(ReadFile(state->PlaybackHandle, newInput, sizeof(*newInput), &bytesRead, 0))
-    {
-        if(bytesRead == 0)
-        {
-            int playbackIndex = state->InputPlaybackIndex;
-            Win32EndInputPlayback(state);
-            Win32BeginInputPlayback(state, playbackIndex);
-            ReadFile(state->PlaybackHandle, newInput, sizeof(*newInput), &bytesRead, 0);
-        }
-    }
-}
-
 internal void Win32ToggleFullScreen(HWND window)
 {
     // Thanks to Raymond Chan we can do this:
@@ -646,25 +573,7 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
                     }
                     else if(keyCode == 'L')
                     {
-                        if(isDown)
-                        {
-                            if(state->InputPlaybackIndex == 0)
-                            {
-                                if(state->InputRecordingIndex == 0)
-                                {
-                                    Win32BeginInputRecording(state, 1);
-                                }
-                                else
-                                {
-                                    Win32EndInputRecording(state);
-                                    Win32BeginInputPlayback(state, 1);
-                                }
-                            }
-                            else
-                            {
-                                Win32EndInputPlayback(state);
-                            }
-                        }
+                        // do
                     }
                     else if(keyCode == 'K')
                     {
@@ -839,29 +748,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             memory.TransientStorage = ((uint8*)memory.PermanentStorage + memory.PermanentStorageSize);
             memory.TransientStorageStart = memory.TransientStorage;
             
-            for(int replayIndex = 0; replayIndex < ArrayCount(win32State.ReplayBuffers); replayIndex++)
-            {
-                Win32ReplayBuffer* replayBuffer = &win32State.ReplayBuffers[replayIndex];
-                
-                Win32GetInputFileLocation(&win32State, false, replayIndex, replayBuffer->Filename, sizeof(replayBuffer->Filename));
-                
-                replayBuffer->FileHandle = CreateFileA(replayBuffer->Filename, GENERIC_WRITE | GENERIC_READ, 0, 0, CREATE_ALWAYS, 0, 0);
-                DWORD maxSizeHigh = win32State.TotalSize >> 32;
-                DWORD maxSizeLow = win32State.TotalSize & 0xFFFFFFFF;
-                replayBuffer->MapView = CreateFileMappingA(replayBuffer->FileHandle, 0, PAGE_READWRITE,
-                                                       maxSizeHigh, maxSizeLow, 0);
-                replayBuffer->Data = MapViewOfFile(replayBuffer->MapView, FILE_MAP_ALL_ACCESS, 0, 0, win32State.TotalSize);
-                
-                if(replayBuffer->Data)
-                {
-                    
-                }
-                else
-                {
-                    // TODO: Log error
-                }
-            }
-            
             if(memory.PermanentStorage && memory.TransientStorage && samples)
             {            
                 MP_INPUT input[2] = {};
@@ -990,15 +876,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         {
                             newController->IsConntected = true;
                         }
-                    }
-                    
-                    if(win32State.InputRecordingIndex)
-                    {
-                        Win32RecordInput(&win32State, newInput);
-                    }
-                    if(win32State.InputPlaybackIndex)
-                    {
-                        Win32PlaybackInput(&win32State, newInput);
                     }
                     
                     if(game.UpdateAndRender)

@@ -6,19 +6,19 @@
 // Vectors
 // ---------------------
 
-struct Vector2
+struct vec2
 {
     float X, Y;
 };
 
-struct Vector3
+struct vec3
 {
     float X, Y, Z;
 };
 
-inline Vector3 operator*(float a, Vector3 b)
+inline vec3 operator*(float a, vec3 b)
 {
-    Vector3 result;
+    vec3 result;
     
     result.X = a * b.X;
     result.Y = a * b.Y;
@@ -27,21 +27,21 @@ inline Vector3 operator*(float a, Vector3 b)
     return result;
 }
 
-inline Vector3 operator*(Vector3 b, float a)
+inline vec3 operator*(vec3 b, float a)
 {
     return a * b;
 }
 
-inline Vector3& operator*=(Vector3 &a, float b)
+inline vec3& operator*=(vec3 &a, float b)
 {
     a = b * a;
     
     return a;
 }
 
-inline Vector3 operator+(Vector3 a)
+inline vec3 operator+(vec3 a)
 {
-    Vector3 result;
+    vec3 result;
     
     result.X = -a.X;
     result.Y = -a.Y;
@@ -50,9 +50,9 @@ inline Vector3 operator+(Vector3 a)
     return result;
 }
 
-inline Vector3 operator+(Vector3 a, Vector3 b)
+inline vec3 operator+(vec3 a, vec3 b)
 {
-    Vector3 result;
+    vec3 result;
     
     result.X = a.X + b.X;
     result.Y = a.Y + b.Y;
@@ -61,16 +61,16 @@ inline Vector3 operator+(Vector3 a, Vector3 b)
     return result;
 }
 
-inline Vector3& operator+=(Vector3 &a, Vector3 b)
+inline vec3& operator+=(vec3 &a, vec3 b)
 {
     a = a + b;
     
     return a;
 }
 
-inline Vector3 operator-(Vector3 a, Vector3 b)
+inline vec3 operator-(vec3 a, vec3 b)
 {
-    Vector3 result;
+    vec3 result;
     
     result.X = a.X - b.X;
     result.Y = a.Y - b.Y;
@@ -79,17 +79,17 @@ inline Vector3 operator-(Vector3 a, Vector3 b)
     return result;
 }
 
-inline Vector3& operator-=(Vector3 &a, Vector3 b)
+inline vec3& operator-=(vec3 &a, vec3 b)
 {
     a = a - b;
     
     return a;
 }
 
-Vector3 NormaliseVector3(Vector3 vec)
+vec3 Normalisevec3(vec3 vec)
 {
     float length = sqrtf(vec.X * vec.X + vec.Y * vec.Y + vec.Z * vec.Z);
-    Vector3 result;
+    vec3 result;
     
     result.X = vec.X / length;
     result.Y = vec.Y / length;
@@ -98,16 +98,16 @@ Vector3 NormaliseVector3(Vector3 vec)
     return result;
 }
 
-float Vector3Dot(Vector3 a, Vector3 b)
+float vec3Dot(vec3 a, vec3 b)
 {
     float result = a.X * b.X + a.Y * b.Y + a.Z * b.Z;
     
     return result;
 }
 
-Vector3 Vector3Cross(Vector3 a, Vector3 b)
+vec3 vec3Cross(vec3 a, vec3 b)
 {
-    Vector3 result;
+    vec3 result;
     
     result.X = a.Y * b.Z - a.Z * b.Y;
     result.Y = a.Z * b.X - a.X * b.Z;
@@ -120,14 +120,14 @@ Vector3 Vector3Cross(Vector3 a, Vector3 b)
 // 4x4 Matrix
 // ---------------------
 
-struct Mat4
+struct mat4x4
 {
     float data[4][4];
 };
 
-Mat4 operator*(Mat4 a, Mat4 b)
+mat4x4 operator*(mat4x4 a, mat4x4 b)
 {
-    Mat4 result = {};
+    mat4x4 result = {};
     
     for(uint16 k = 0; k < 4; k++)
     {
@@ -140,12 +140,12 @@ Mat4 operator*(Mat4 a, Mat4 b)
     return result;
 }
 
-Mat4 Mat4RotateX(float rad)
+mat4x4 Mat4RotateX(float rad)
 {
     float c = cosf(rad);
     float s = sinf(rad);
     
-    Mat4 result = {
+    mat4x4 result = {
         1.0f, 0.0f, 0.0f, 0.0f,
         0.0f, c, -s, 0.0f,
         0.0f, s, c, 0.0f,
@@ -155,12 +155,12 @@ Mat4 Mat4RotateX(float rad)
     return result;
 }
 
-Mat4 Mat4RotateY(float rad)
+mat4x4 Mat4RotateY(float rad)
 {
     float c = cosf(rad);
     float s = sinf(rad);
     
-    Mat4 result = {
+    mat4x4 result = {
         c, 0.0f, s, 0.0f,
         0.0f, 1.0f, 0.0f, 0.0f,
         -s, 0.0f, c, 0.0f,
@@ -170,12 +170,12 @@ Mat4 Mat4RotateY(float rad)
     return result;
 }
 
-Mat4 Mat4RotateZ(float rad)
+mat4x4 Mat4RotateZ(float rad)
 {
     float c = cosf(rad);
     float s = sinf(rad);
     
-    Mat4 result = {
+    mat4x4 result = {
         c, -s, 0.0f, 0.0f,
         s, c, 0.0f, 0.0f,
         0.0f, 0.0f, 1.0f, 0.0f,
@@ -185,35 +185,35 @@ Mat4 Mat4RotateZ(float rad)
     return result;
 }
 
-Mat4 LookAt(Vector3 eye, Vector3 center, Vector3 up)
+mat4x4 LookAt(vec3 eye, vec3 center, vec3 up)
 {
-    Vector3 X, Y, Z;
+    vec3 X, Y, Z;
     
     Z = eye - center;
-    Z = NormaliseVector3(Z);
+    Z = Normalisevec3(Z);
     Y = up;
-    X = Vector3Cross(Y, Z);
-    Y = Vector3Cross(Z, X);
+    X = vec3Cross(Y, Z);
+    Y = vec3Cross(Z, X);
     
-    X = NormaliseVector3(X);
-    Y = NormaliseVector3(Y);
+    X = Normalisevec3(X);
+    Y = Normalisevec3(Y);
     
-    Mat4 result;
+    mat4x4 result;
     
     result.data[0][0] = X.X;
     result.data[1][0] = X.Y;
     result.data[2][0] = X.Z;
-    result.data[3][0] = -Vector3Dot(X, eye);
+    result.data[3][0] = -vec3Dot(X, eye);
     
     result.data[0][1] = Y.X;
     result.data[1][1] = Y.Y;
     result.data[2][1] = Y.Z;
-    result.data[3][1] = -Vector3Dot(Y, eye);
+    result.data[3][1] = -vec3Dot(Y, eye);
     
     result.data[0][2] = Z.X;
     result.data[1][2] = Z.Y;
     result.data[2][2] = Z.Z;
-    result.data[3][2] = -Vector3Dot(Z, eye);
+    result.data[3][2] = -vec3Dot(Z, eye);
     
     result.data[0][3] = 0.0f;
     result.data[1][3] = 0.0f;
@@ -224,9 +224,9 @@ Mat4 LookAt(Vector3 eye, Vector3 center, Vector3 up)
 }
 
 // fov is in radians, aspectRatio = width / height, zNear and zFar are clipping plane z-positions
-Mat4 Perspective(float fov, float aspectRatio, float zNear, float zFar)
+mat4x4 Perspective(float fov, float aspectRatio, float zNear, float zFar)
 {
-    Mat4 result = {};
+    mat4x4 result = {};
     float tanHalfAngle = tanf(fov / 2.0f);
     
     result.data[0][0] = 1.0f / (aspectRatio * tanHalfAngle);

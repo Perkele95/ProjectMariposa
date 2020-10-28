@@ -74,9 +74,9 @@ const uint16 gIndices[] = {
 
 struct UniformbufferObject
 {
-    alignas(16) Mat4 Model;
-    alignas(16) Mat4 View;
-    alignas(16) Mat4 Proj;
+    alignas(16) mat4x4 Model;
+    alignas(16) mat4x4 View;
+    alignas(16) mat4x4 Proj;
 };
 
 struct QueueFamilyIndices {
@@ -94,7 +94,7 @@ struct VulkanData
     VkInstance Instance;
     
     VkSurfaceKHR Surface;
-    VkPhysicalDevice PhysicalDevice;
+    VkPhysicalDevice Gpu;
     VkDevice Device;
     
     VkQueue GraphicsQueue;
@@ -158,14 +158,21 @@ struct SwapChainSupportDetails
     bool32 IsAdequate;
 };
 
-inline static void* PushBackMemory(MP_MEMORY* memory, uint64 size)
+inline static void* PushBackTransientStorage(MP_MEMORY* memory, uint64 size)
 {
     void* allocation = memory->TransientStorage;
     memory->TransientStorage = (uint8*) memory->TransientStorage + size;
     return allocation;
 }
 
-inline static void PurgeMemory(MP_MEMORY* memory)
+inline static void* PushBackPermanentStorage(MP_MEMORY* memory, uint64 size)
+{
+    void* allocation = memory->PermanentStorage;
+    memory->PermanentStorage = (uint8*) memory->PermanentStorage + size;
+    return allocation;
+}
+
+inline static void PurgeTransientStorage(MP_MEMORY* memory)
 {
     memory->TransientStorage = memory->TransientStorageStart;
     memset(memory->TransientStorageStart, 0, memory->TransientStorageSize);

@@ -48,25 +48,10 @@ struct Win32GameCode
     bool32 IsValid;
 };
 
-struct Win32ReplayBuffer
-{
-    HANDLE FileHandle;
-    HANDLE MapView;
-    char Filename[MAX_PATH];
-    void* Data;
-};
-
 struct Win32State
 {
     uint64 TotalSize;
     void* GameMemoryBlock;
-    Win32ReplayBuffer ReplayBuffers[4];
-    
-    HANDLE RecordingHandle;
-    int InputRecordingIndex;
-    
-    HANDLE PlaybackHandle;
-    int InputPlaybackIndex;
     
     char ExeFilename[MAX_PATH];
     char* OnePastLastSlash;

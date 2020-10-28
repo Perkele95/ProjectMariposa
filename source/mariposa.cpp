@@ -15,7 +15,7 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
 }
 
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
-{
+{    
     MP_GAMESTATE* gameState = (MP_GAMESTATE*)memory->PermanentStorage;
     MP_ASSERT(sizeof(gameState) <= memory->PermanentStorageSize);
 

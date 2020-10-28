@@ -61,15 +61,6 @@ struct debug_read_file_result
     uint32 dataSize;
 };
 
-#if MP_INTERNAL
-struct debug_cycle_counter
-{
-    char* Name;
-    uint64 CycleCount;
-    uint32 HitCount;
-};
-#endif
-
 #define DEBUG_PLATFORM_READ_ENTIRE_FILE(name) debug_read_file_result name(MP_THREAD_CONTEXT* thread, char* filename)
 typedef DEBUG_PLATFORM_READ_ENTIRE_FILE(debug_platform_read_entire_file);
 
@@ -78,13 +69,6 @@ typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
 
 #define DEBUG_PLATFORM_FREE_FILE_MEMORY(name) void name(MP_THREAD_CONTEXT* thread, void* memory)
 typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
-
-#if _MSC_VER
-
-#else
-
-#endif
-
 #endif
 
 struct MP_SOUNDOUTPUTBUFFER
