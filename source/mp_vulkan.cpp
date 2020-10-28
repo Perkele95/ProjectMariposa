@@ -4,14 +4,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "..\stb_image\stb_image.h"
 
-#define MP_VK_EXT_COUNT 2
-inline static void GetRequiredExtensions(char** extensions)
-{
-    extensions[0] = "VK_KHR_surface";
-    extensions[1] = "VK_KHR_win32_surface";
-}
-
-static void CreateInstance(VulkanData* vkData)
+static void CreateInstance(VulkanData* vkData, MP_MEMORY* memory)
 {
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -38,16 +31,14 @@ static void CreateInstance(VulkanData* vkData)
 
     uint32 extensionsCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionsCount, nullptr);
-
-    // TODO: replace with dynamic array
-    VkExtensionProperties extensionProperties[30] = {};
-    MP_ASSERT(extensionsCount <= ArrayCount(extensionProperties));
-
+    
+    VkExtensionProperties* extensionProperties = (VkExtensionProperties*) PushBackMemory(memory, sizeof(VkExtensionProperties) * extensionsCount);
+    
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionsCount, extensionProperties);
 
-    char* extensions[MP_VK_EXT_COUNT] = {};
-    GetRequiredExtensions(extensions);
-    createInfo.enabledExtensionCount = MP_VK_EXT_COUNT;
+    char* extensions[] = { "VK_KHR_surface", "VK_KHR_win32_surface" };
+    
+    createInfo.enabledExtensionCount = ArrayCount(extensions);
     createInfo.ppEnabledExtensionNames = extensions;
 
     OutputDebugStringA("Vulkan extensions:\n");
@@ -63,13 +54,13 @@ static void CreateInstance(VulkanData* vkData)
     OutputDebugStringA("Vulkan instance created\n");
 }
 
-static bool CheckValidationLayerSupport(VulkanData* vkData)
+static bool CheckValidationLayerSupport(VulkanData* vkData, MP_MEMORY* memory)
 {
     uint32 layerCount = 0;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-    VkLayerProperties availableLayers[30] = {};
-    MP_ASSERT(layerCount <= ArrayCount(availableLayers));
+    
+    VkLayerProperties* availableLayers = (VkLayerProperties*) PushBackMemory(memory, sizeof(VkLayerProperties) * layerCount);
+    
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers);
 
     bool32 layerFound = false;
@@ -88,15 +79,14 @@ static bool CheckValidationLayerSupport(VulkanData* vkData)
     return layerFound;
 }
 
-static QueueFamilyIndices FindQueueFamilyIndices(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice) {
+static QueueFamilyIndices FindQueueFamilyIndices(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice, MP_MEMORY* memory) {
     QueueFamilyIndices indices = {};
-    uint32 queueFamiltyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(*checkedPhysDevice, &queueFamiltyCount, nullptr);
-    VkQueueFamilyProperties queueFamilyProperties[30] = {};
-    MP_ASSERT(queueFamiltyCount < ArrayCount(queueFamilyProperties));
-    vkGetPhysicalDeviceQueueFamilyProperties(*checkedPhysDevice, &queueFamiltyCount, queueFamilyProperties);
+    uint32 queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(*checkedPhysDevice, &queueFamilyCount, nullptr);
+    VkQueueFamilyProperties* queueFamilyProperties = (VkQueueFamilyProperties*) PushBackMemory(memory, sizeof(VkQueueFamilyProperties) * queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(*checkedPhysDevice, &queueFamilyCount, queueFamilyProperties);
 
-    for(uint32 i = 0; i < queueFamiltyCount; i++)
+    for(uint32 i = 0; i < queueFamilyCount; i++)
     {
         if(queueFamilyProperties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
         {
@@ -124,12 +114,12 @@ static QueueFamilyIndices FindQueueFamilyIndices(VulkanData* vkData, VkPhysicalD
     return indices;
 }
 
-static bool CheckDeviceExtensionSupport(VkPhysicalDevice physDevice)
+static bool CheckDeviceExtensionSupport(VkPhysicalDevice physDevice, MP_MEMORY* memory)
 {
     uint32 extensionCount = 0;
     vkEnumerateDeviceExtensionProperties(physDevice, nullptr, &extensionCount, nullptr);
-    VkExtensionProperties availableExtensions[150] = {};
-    MP_ASSERT(extensionCount <= ArrayCount(availableExtensions));
+    VkExtensionProperties* availableExtensions = (VkExtensionProperties*) PushBackMemory(memory, sizeof(VkExtensionProperties) * extensionCount);
+    
     vkEnumerateDeviceExtensionProperties(physDevice, nullptr, &extensionCount, availableExtensions);
     // TODO: replace the nested for loops with a function, it is similar to those in checkvalidationlayersupport
     bool32 extensionFound = false;
@@ -177,11 +167,11 @@ static SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice physDevice
     return details;
 }
 
-static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice)
+static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDevice, MP_MEMORY* memory)
 {
-    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, checkedPhysDevice);
+    QueueFamilyIndices indices = FindQueueFamilyIndices(vkData, checkedPhysDevice, memory);
 
-    bool extensionsSupported = CheckDeviceExtensionSupport(*checkedPhysDevice);
+    bool extensionsSupported = CheckDeviceExtensionSupport(*checkedPhysDevice, memory);
     bool swapChainAdequate = false;
     if(extensionsSupported)
     {
@@ -197,20 +187,20 @@ static bool IsDeviceSuitable(VulkanData* vkData, VkPhysicalDevice* checkedPhysDe
     return indices.IsComplete && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 }
 
-static void PickPhysicalDevice(VulkanData* vkData)
+static void PickPhysicalDevice(VulkanData* vkData, MP_MEMORY* memory)
 {
     uint32 deviceCount = 0;
     vkEnumeratePhysicalDevices(vkData->Instance, &deviceCount, nullptr);
     if(deviceCount == 0)    // TODO: replace with runtime error
         OutputDebugStringA("Failed to find GPUs with Vulkan Support");
-
-    VkPhysicalDevice devices[10] = {};
-    MP_ASSERT(deviceCount <= ArrayCount(devices));
+    
+    VkPhysicalDevice* devices = (VkPhysicalDevice*) PushBackMemory(memory, sizeof(VkPhysicalDevice) * deviceCount);
+    
     vkEnumeratePhysicalDevices(vkData->Instance, &deviceCount, devices);
 
     for(uint32 i = 0; i < deviceCount; i++)
     {
-        if(IsDeviceSuitable(vkData, &devices[i]))
+        if(IsDeviceSuitable(vkData, &devices[i], memory))
         {
             vkData->PhysicalDevice = devices[i];
             break;
@@ -224,10 +214,23 @@ static void PickPhysicalDevice(VulkanData* vkData)
 static void CreateLogicalDevice(VulkanData* vkData)
 {
     VkDeviceQueueCreateInfo queueCreateInfos[2] = {};
-    uint32 uniqueQueueFamilies[] = { vkData->Indices.GraphicsFamily, vkData->Indices.PresentFamily };
-
+    
+    uint32 uniqueQueueFamilies[2] = {};
+    uint32 queueCount = 0;
+    if(vkData->Indices.GraphicsFamily == vkData->Indices.PresentFamily)
+    {
+        uniqueQueueFamilies[0] = vkData->Indices.GraphicsFamily;
+        queueCount = 1;
+    }
+    else
+    {
+        uniqueQueueFamilies[0] = vkData->Indices.GraphicsFamily;
+        uniqueQueueFamilies[1] = vkData->Indices.PresentFamily;
+        queueCount = 2;
+    }
+    
     float queuePriority = 1.0f;
-    for(uint32 i = 0; i < ArrayCount(uniqueQueueFamilies); i++)
+    for(uint32 i = 0; i < queueCount; i++)
     {
         VkDeviceQueueCreateInfo queueCreateInfo = {};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -242,7 +245,7 @@ static void CreateLogicalDevice(VulkanData* vkData)
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    createInfo.queueCreateInfoCount = ArrayCount(queueCreateInfos);
+    createInfo.queueCreateInfoCount = queueCount;
     createInfo.pQueueCreateInfos = queueCreateInfos;
     createInfo.pEnabledFeatures = &deviceFeatures;
     createInfo.enabledExtensionCount = ArrayCount(deviceExtensions);
@@ -264,17 +267,6 @@ static void CreateLogicalDevice(VulkanData* vkData)
 
     vkGetDeviceQueue(vkData->Device, vkData->Indices.GraphicsFamily, 0, &vkData->GraphicsQueue);
     vkGetDeviceQueue(vkData->Device, vkData->Indices.PresentFamily, 0, &vkData->PresentQueue);
-}
-
-VkSurfaceFormatKHR ChooseSwapSurfaceFormat(VkSurfaceFormatKHR availableFormats[])
-{
-    for(int i = 0; i < ArrayCount(availableFormats); i++)
-    {
-        if(availableFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB && availableFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            return availableFormats[i];
-    }
-
-    return availableFormats[0];
 }
 
 VkPresentModeKHR ChooseSwapPresentMode(VkPresentModeKHR availablePresentModes[])
@@ -308,6 +300,17 @@ VkExtent2D ChooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities, int windowWid
 
         return actualExtent;
     }
+}
+
+VkSurfaceFormatKHR ChooseSwapSurfaceFormat(VkSurfaceFormatKHR availableFormats[])
+{
+    for(int i = 0; i < ArrayCount(availableFormats); i++)
+    {
+        if(availableFormats[i].format == VK_FORMAT_B8G8R8A8_SRGB && availableFormats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            return availableFormats[i];
+    }
+
+    return availableFormats[0];
 }
 
 static void CreateSwapChain(VulkanData* vkData, int windowWidth, int windowHeight)
@@ -393,14 +396,14 @@ static VkImageView CreateImageView(VkDevice device, VkImage image, VkFormat form
 
 static void CreateImageViews(VulkanData* vkData)
 {
-    for(uint32 i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
+    for(uint32 i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++) // TODO: count
     {
         if(vkData->SwapChainImages[i] == 0)
             break;
 
         vkData->SwapChainImageViews[i] = CreateImageView(vkData->Device, vkData->SwapChainImages[i], vkData->SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
         
-        vkData->FramebufferCount = i;
+        vkData->SwapChainImageCount = i;
     }
 }
 
@@ -674,7 +677,7 @@ static void CreateGraphicsPipeline(VulkanData* vkData)
 
 static void CreateFramebuffers(VulkanData* vkData)
 {
-    for(uint32 i = 0; i < vkData->FramebufferCount; i++)
+    for(uint32 i = 0; i < vkData->SwapChainImageCount; i++)
     {
         VkImageView attachments[] = { vkData->SwapChainImageViews[i] , vkData->DepthImageView };
         
@@ -844,17 +847,6 @@ static void CreateDepthResources(VulkanData* vkData)
     vkData->DepthImageView = CreateImageView(vkData->Device, vkData->DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
-static void CopyBuffer(const VulkanData* vkData, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
-{
-    VkCommandBuffer commandBuffer = BeginSingleTimeCommands(vkData);
-
-    VkBufferCopy copyRegion = {};
-    copyRegion.size = size;
-    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    EndSingleTimeCommands(vkData, commandBuffer);
-}
-
 static void CreateBuffer(const VulkanData* vkData, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags propertyFlags, VkBuffer* buffer, VkDeviceMemory* bufferMemory)
 {
     VkBufferCreateInfo bufferInfo = {};
@@ -956,50 +948,47 @@ static void CreateTextureSampler(VulkanData* vkData)
         OutputDebugStringA("Failed to create texture sampler!");
 }
 
-static void CreateVertexbuffer(VulkanData* vkData)
+static void CopyBuffer(const VulkanData* vkData, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 {
-    VkDeviceSize bufferSize = sizeof(gVertices);
+    VkCommandBuffer commandBuffer = BeginSingleTimeCommands(vkData);
 
-    uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    VkBuffer stagingbuffer;
-    VkDeviceMemory stagingbufferMemory;
-    CreateBuffer(vkData, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &stagingbuffer, &stagingbufferMemory);
+    VkBufferCopy copyRegion = {};
+    copyRegion.size = size;
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    void* data;
-    vkMapMemory(vkData->Device, stagingbufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, gVertices, (uint64)bufferSize);
-    vkUnmapMemory(vkData->Device, stagingbufferMemory);
-
-    uint32 usageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    CreateBuffer(vkData, bufferSize, usageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkData->Vertexbuffer, &vkData->VertexbufferMemory);
-
-    CopyBuffer(vkData, stagingbuffer, vkData->Vertexbuffer, bufferSize);
-
-    vkDestroyBuffer(vkData->Device, stagingbuffer, nullptr);
-    vkFreeMemory(vkData->Device, stagingbufferMemory, nullptr);
+    EndSingleTimeCommands(vkData, commandBuffer);
 }
 
-static void CreateIndexbuffer(VulkanData* vkData)
+static void CreateGeometryBuffers(VulkanData* vkData)
 {
-    VkDeviceSize bufferSize = sizeof(gIndices);
-
+    VkDeviceSize vertbufferSize = sizeof(gVertices);
+    VkDeviceSize indexbufferSize = sizeof(gIndices);
     uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    VkBuffer stagingbuffer;
-    VkDeviceMemory stagingbufferMemory;
-    CreateBuffer(vkData, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &stagingbuffer, &stagingbufferMemory);
-
-    void* data;
-    vkMapMemory(vkData->Device, stagingbufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, gIndices, (uint64)bufferSize);
-    vkUnmapMemory(vkData->Device, stagingbufferMemory);
-
-    uint32 usageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    CreateBuffer(vkData, bufferSize, usageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkData->Indexbuffer, &vkData->IndexbufferMemory);
-
-    CopyBuffer(vkData, stagingbuffer, vkData->Indexbuffer, bufferSize);
-
-    vkDestroyBuffer(vkData->Device, stagingbuffer, nullptr);
-    vkFreeMemory(vkData->Device, stagingbufferMemory, nullptr);
+    VkBuffer vertStagingbuffer, indexStagingbuffer;
+    VkDeviceMemory vertStagingbufferMemory, indexStagingbufferMemory;
+    void* vertData;
+    void* indexData;
+    VkBufferUsageFlags vertUsageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    VkBufferUsageFlags indexUsageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    
+    CreateBuffer(vkData, vertbufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &vertStagingbuffer, &vertStagingbufferMemory);
+    CreateBuffer(vkData, indexbufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &indexStagingbuffer, &indexStagingbufferMemory);
+    vkMapMemory(vkData->Device, vertStagingbufferMemory, 0, vertbufferSize, 0, &vertData);
+    vkMapMemory(vkData->Device, indexStagingbufferMemory, 0, indexbufferSize, 0, &indexData);
+    memcpy(vertData, gVertices, (uint64)vertbufferSize);
+    memcpy(indexData, gIndices, (uint64)indexbufferSize);
+    vkUnmapMemory(vkData->Device, vertStagingbufferMemory);
+    vkUnmapMemory(vkData->Device, indexStagingbufferMemory);
+    
+    CreateBuffer(vkData, vertbufferSize, vertUsageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkData->Vertexbuffer, &vkData->VertexbufferMemory);
+    CreateBuffer(vkData, indexbufferSize, indexUsageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vkData->Indexbuffer, &vkData->IndexbufferMemory);
+    CopyBuffer(vkData, vertStagingbuffer, vkData->Vertexbuffer, vertbufferSize);
+    CopyBuffer(vkData, indexStagingbuffer, vkData->Indexbuffer, indexbufferSize);
+    
+    vkDestroyBuffer(vkData->Device, vertStagingbuffer, nullptr);
+    vkDestroyBuffer(vkData->Device, indexStagingbuffer, nullptr);
+    vkFreeMemory(vkData->Device, vertStagingbufferMemory, nullptr);
+    vkFreeMemory(vkData->Device, indexStagingbufferMemory, nullptr);
 }
 
 static void CreateUniformbuffers(VulkanData* vkData)
@@ -1007,7 +996,7 @@ static void CreateUniformbuffers(VulkanData* vkData)
     VkDeviceSize bufferSize = sizeof(UniformbufferObject);
     uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-    for(uint32 i = 0; i < vkData->FramebufferCount; i++)
+    for(uint32 i = 0; i < vkData->SwapChainImageCount; i++)
     {
         CreateBuffer(vkData, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, bufferSrcFlags, &vkData->Uniformbuffers[i], &vkData->UniformbuffersMemory[i]);
     }
@@ -1017,22 +1006,22 @@ static void CreateDescriptorPool(VulkanData* vkData)
 {
     VkDescriptorPoolSize poolSizes[2] = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = vkData->FramebufferCount;
+    poolSizes[0].descriptorCount = vkData->SwapChainImageCount;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = vkData->FramebufferCount;
+    poolSizes[1].descriptorCount = vkData->SwapChainImageCount;
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = ArrayCount(poolSizes);
     poolInfo.pPoolSizes = poolSizes;
-    poolInfo.maxSets = vkData->FramebufferCount;
+    poolInfo.maxSets = vkData->SwapChainImageCount;
 
     VkResult poolResult = vkCreateDescriptorPool(vkData->Device, &poolInfo, nullptr, &vkData->DescriptorPool);
     if(poolResult != VK_SUCCESS)
         OutputDebugStringA("Failed to create descriptor pool!");
 }
 
-static void CreateDescritporSets(VulkanData* vkData)
+static void CreateDescriptorSets(VulkanData* vkData)
 {
     VkDescriptorSetLayout layouts[MP_VK_SWAP_IMAGE_MAX];
     for(uint32 i = 0; i < MP_VK_SWAP_IMAGE_MAX; i++)
@@ -1041,14 +1030,14 @@ static void CreateDescritporSets(VulkanData* vkData)
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = vkData->DescriptorPool;
-    allocInfo.descriptorSetCount = vkData->FramebufferCount;
+    allocInfo.descriptorSetCount = vkData->SwapChainImageCount;
     allocInfo.pSetLayouts = layouts;
 
     VkResult allocResult = vkAllocateDescriptorSets(vkData->Device, &allocInfo, vkData->DescriptorSets);
     if(allocResult != VK_SUCCESS)
         OutputDebugStringA("Failed to allocate descriptor sets!");
 
-    for(uint32 i = 0; i < vkData->FramebufferCount; i++)
+    for(uint32 i = 0; i < vkData->SwapChainImageCount; i++)
     {
         VkDescriptorBufferInfo bufferInfo = {};
         bufferInfo.buffer = vkData->Uniformbuffers[i];
@@ -1087,13 +1076,13 @@ static void CreateCommandBuffers(VulkanData* vkData)
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = vkData->CommandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = vkData->FramebufferCount;
+    allocInfo.commandBufferCount = vkData->SwapChainImageCount;
 
     VkResult allocateResult = vkAllocateCommandBuffers(vkData->Device, &allocInfo, vkData->Commandbuffers);
     if(allocateResult != VK_SUCCESS)
         OutputDebugStringA("Failed to allocate command buffers!");
 
-    for(uint32 i = 0; i < vkData->FramebufferCount; i++)
+    for(uint32 i = 0; i < vkData->SwapChainImageCount; i++)
     {
         VkCommandBufferBeginInfo beginInfo = {};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1111,7 +1100,7 @@ static void CreateCommandBuffers(VulkanData* vkData)
         renderPassInfo.renderArea.extent = vkData->SwapChainExtent;
 
         VkClearValue clearValues[2];
-        clearValues[0].color  = { 0.0f, 0.05f, 0.1f, 1.0f };
+        clearValues[0].color  = { 0.6f, 0.9f, 1.0f, 1.0f };
         clearValues[1].depthStencil = { 1.0f, 0 };
         renderPassInfo.clearValueCount = ArrayCount(clearValues);
         renderPassInfo.pClearValues = clearValues;
@@ -1166,7 +1155,7 @@ static void CleanUpSwapChain(VulkanData* vkData)
         vkDestroyFramebuffer(vkData->Device, vkData->Framebuffers[i], nullptr);
     }
 
-    vkFreeCommandBuffers(vkData->Device, vkData->CommandPool, vkData->FramebufferCount, vkData->Commandbuffers);
+    vkFreeCommandBuffers(vkData->Device, vkData->CommandPool, vkData->SwapChainImageCount, vkData->Commandbuffers);
     vkDestroyPipeline(vkData->Device, vkData->GraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(vkData->Device, vkData->PipelineLayout, nullptr);
     vkDestroyRenderPass(vkData->Device, vkData->RenderPass, nullptr);
@@ -1201,7 +1190,7 @@ static void RecreateSwapChain(VulkanData* vkData, int windowWidth, int windowHei
     CreateFramebuffers(vkData);
     CreateUniformbuffers(vkData);
     CreateDescriptorPool(vkData);
-    CreateDescritporSets(vkData);
+    CreateDescriptorSets(vkData);
     CreateCommandBuffers(vkData);
 }
 
@@ -1214,13 +1203,14 @@ VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_rea
     vkData->VertexShader = *vertShader;
     vkData->FragmentShader = *fragShader;
 
-    if(enableValidationLayers && !CheckValidationLayerSupport(vkData))
+    if(enableValidationLayers && !CheckValidationLayerSupport(vkData, memory))
         OutputDebugStringA("Validation layers requested, but not available!\n");
 
     // IMPORTANT: Order matters
-    CreateInstance(vkData);
+    CreateInstance(vkData, memory);
     CreateWindowSurface(vkData, windowInfo->pHInstance, windowInfo->pWindow);
-    PickPhysicalDevice(vkData);
+    PickPhysicalDevice(vkData, memory);
+    PurgeMemory(memory);
     CreateLogicalDevice(vkData);
     CreateSwapChain(vkData, windowInfo->Width, windowInfo->Height);
     CreateImageViews(vkData);
@@ -1233,11 +1223,10 @@ VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_rea
     CreateTextureImage(vkData);
     CreateTextureImageView(vkData);
     CreateTextureSampler(vkData);
-    CreateVertexbuffer(vkData);
-    CreateIndexbuffer(vkData);
+    CreateGeometryBuffers(vkData);
     CreateUniformbuffers(vkData);
     CreateDescriptorPool(vkData);
-    CreateDescritporSets(vkData);
+    CreateDescriptorSets(vkData);
     CreateCommandBuffers(vkData);
     CreateSyncObjects(vkData);
 
@@ -1259,8 +1248,13 @@ static void UpdateUniformbuffer(uint32 currentImage, VulkanData* vkData, MP_REND
     vkUnmapMemory(vkData->Device, vkData->UniformbuffersMemory[currentImage]);
 }
 
-static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight, MP_RENDERDATA* renderData)
+void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight, MP_RENDERDATA* renderData)
 {
+    if(windowWidth == 0 || windowHeight == 0)
+    {
+        return;
+    }
+
     vkWaitForFences(vkData->Device, 1, &vkData->InFlightFences[vkData->currentFrame], VK_TRUE, UINT64MAX);
 
     uint32 imageIndex = 0;
@@ -1326,16 +1320,6 @@ static void DrawFrame(VulkanData* vkData, int windowWidth, int windowHeight, MP_
     }
 
     vkData->currentFrame = (vkData->currentFrame + 1) % MP_VK_FRAMES_IN_FLIGHT_MAX;
-}
-
-void VulkanUpdate(VulkanData* vkData, int windowWidth, int windowHeight, MP_RENDERDATA* renderData)
-{
-    if(windowWidth == 0 || windowHeight == 0)
-    {
-        return;
-    }
-
-    DrawFrame(vkData, windowWidth, windowHeight, renderData);
 }
 
 void VulkanCleanup(VulkanData* vkData)

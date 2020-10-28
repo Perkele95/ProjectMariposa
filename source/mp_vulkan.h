@@ -115,7 +115,7 @@ struct VulkanData
     VkPipeline GraphicsPipeline;
     
     VkFramebuffer Framebuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
-    uint32 FramebufferCount;
+    uint32 SwapChainImageCount;
     uint32 currentFrame;
     bool32* FramebufferResized;
     
@@ -158,6 +158,19 @@ struct SwapChainSupportDetails
     bool32 IsAdequate;
 };
 
+inline static void* PushBackMemory(MP_MEMORY* memory, uint64 size)
+{
+    void* allocation = memory->TransientStorage;
+    memory->TransientStorage = (uint8*) memory->TransientStorage + size;
+    return allocation;
+}
+
+inline static void PurgeMemory(MP_MEMORY* memory)
+{
+    memory->TransientStorage = memory->TransientStorageStart;
+    memset(memory->TransientStorageStart, 0, memory->TransientStorageSize);
+}
+
 static uint32 Uint32Clamp(uint32 value, uint32 min, uint32 max)
 {
     if(value < min)
@@ -180,7 +193,7 @@ static VkVertexInputBindingDescription GetVertexBindingDescription()
 
 static void GetVertexAttributeDescriptions(VkVertexInputAttributeDescription attributeDescriptions[], uint32 size)
 {
-    MP_ASSERT(size >= 3);
+    MP_ASSERT(size == 3);
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;
     attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;

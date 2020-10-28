@@ -16,8 +16,6 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
 
 extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
 {
-    PROFILE_BLOCK_START(GameUpdateAndRender);
-
     MP_GAMESTATE* gameState = (MP_GAMESTATE*)memory->PermanentStorage;
     MP_ASSERT(sizeof(gameState) <= memory->PermanentStorageSize);
 
@@ -63,8 +61,6 @@ extern "C" GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
     }
     
     gameState->RenderData.CameraRotation.Z += timestep;
-    
-    PROFILE_BLOCK_END_POINTER(GameUpdateAndRender);
     
     return &gameState->RenderData;
 }

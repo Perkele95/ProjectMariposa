@@ -28,6 +28,7 @@ struct Vertex
 
 struct MP_RENDERDATA
 {
+    // TODO: Put into Camera struct sort of thing
     Vector3 CameraPosition;
     Vector3 CameraRotation;
 };

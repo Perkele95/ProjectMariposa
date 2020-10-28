@@ -62,15 +62,9 @@ struct debug_read_file_result
 };
 
 #if MP_INTERNAL
-enum
-{
-    CycleCounter_GameUpdateAndRender,
-    CycleCounter_VulkanUpdate,
-    CycleCounter_Max
-};
-
 struct debug_cycle_counter
 {
+    char* Name;
     uint64 CycleCount;
     uint32 HitCount;
 };
@@ -86,13 +80,9 @@ typedef DEBUG_PLATFORM_WRITE_ENTIRE_FILE(debug_platform_write_entire_file);
 typedef DEBUG_PLATFORM_FREE_FILE_MEMORY(debug_platform_free_file_memory);
 
 #if _MSC_VER
-#define PROFILE_BLOCK_START(ID) uint64 startCycleCount##ID = __rdtsc();
-#define PROFILE_BLOCK_END(ID) memory.CycleCounters[CycleCounter_##ID].CycleCount = __rdtsc() - startCycleCount##ID; memory.CycleCounters[CycleCounter_##ID].HitCount++;
-#define PROFILE_BLOCK_END_POINTER(ID) memory->CycleCounters[CycleCounter_##ID].CycleCount = __rdtsc() - startCycleCount##ID; memory->CycleCounters[CycleCounter_##ID].HitCount++;
+
 #else
-#define PROFILE_BLOCK_START(ID)
-#define PROFILE_BLOCK_END(ID)
-#define PROFILE_BLOCK_END_POINTER(ID)
+
 #endif
 
 #endif
@@ -181,12 +171,9 @@ struct MP_MEMORY
     
     uint64 TransientStorageSize;
     void* TransientStorage; // NOTE: Set to zero before allocation!
+    void* TransientStorageStart;
     
     debug_platform_read_entire_file* DEBUGPlatformReadEntireFile;
     debug_platform_write_entire_file* DEBUGPlatformWriteEntireFile;
     debug_platform_free_file_memory* DEBUGPlatformFreeFileMemory;
-    
-    #if MP_INTERNAL
-    debug_cycle_counter CycleCounters[CycleCounter_Max];
-    #endif
 };

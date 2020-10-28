@@ -10,6 +10,9 @@
 
 #include "mp_vulkan.cpp"
 
+#define PROFILER_ENABLE
+#include "profiler.h"
+
 // TODO: UNglobal these:
 global_variable bool32 GlobalRunning;
 global_variable bool32 GlobalPause;
@@ -747,100 +750,6 @@ inline internal float Win32GetSecondsElapsed(LARGE_INTEGER start, LARGE_INTEGER 
     float result = (float)(end.QuadPart - start.QuadPart) / (float)GlobalPerfCountFrequency;
     return result;
 }
-#if 0   // TODO: REMOVE
-internal void Win32DebugDrawVertical(win32OffscreenBuffer* backBuffer, int x, int top, int bottom, uint32 colour)
-{
-    if(top <= 0)
-        top = 0;
-       
-    if(bottom > backBuffer->Height)
-        bottom = backBuffer->Height;
-    
-    if(x >= 0 && x < backBuffer->Width)
-    {
-        uint8* pixel = (uint8*)backBuffer->Memory + x * backBuffer->bytesPerPixel + top * backBuffer->Pitch;
-        for(int y = top; y < bottom; y++)
-        {
-            *(uint32*)pixel = colour;
-            pixel += backBuffer->Pitch;
-        }
-    }
-}
-
-inline internal void Win32DrawSoundbufferMarker(win32OffscreenBuffer* backBuffer, Win32SoundOutput* soundBuffer,
-                                                float C, int padX, int top, int bottom, DWORD value, uint32 colour)
-{
-    int x = padX + (int)(C * (float)value);
-    Win32DebugDrawVertical(backBuffer, x, top, bottom, colour);
-}
-
-// TODO: Remove/replace this when we have a good ol renderer
-internal void Win32DebugSyncDisplay(win32OffscreenBuffer* backBuffer, int markerCount,
-                        Win32DebugTimeMarker* markers, int currentMarkerIndex,  Win32SoundOutput* soundBuffer, float expectedDeltaTime)
-{
-    int padX = 16;
-    int padY = 16;
-    int lineHeight = 64;
-    
-    float C = (float)(backBuffer->Width - 2 * padX) / (float)soundBuffer->SecondaryBufferSize;
-    for(int index = 0; index < markerCount; index++)
-    {
-        Win32DebugTimeMarker* thisMarker = &markers[index];
-        MP_ASSERT(thisMarker->FlipPlayCursor < soundBuffer->SecondaryBufferSize);
-        MP_ASSERT(thisMarker->FlipWriteCursor < soundBuffer->SecondaryBufferSize);
-        MP_ASSERT(thisMarker->OutputPlayCursor < soundBuffer->SecondaryBufferSize);
-        MP_ASSERT(thisMarker->OutputWriteCursor < soundBuffer->SecondaryBufferSize);
-        MP_ASSERT(thisMarker->OutputLocation < soundBuffer->SecondaryBufferSize);
-        MP_ASSERT(thisMarker->OutputByteCount < soundBuffer->SecondaryBufferSize);
-        
-        DWORD playColour = 0xFF00FFFF;
-        DWORD writeColour = 0xFFFF0000;
-        DWORD expectedFlipColour = 0xFFFFFF00;
-        DWORD playWindowColour = 0xFFFF00FF;
-        int top = padY;
-        int bottom = padY + lineHeight;
-        
-        if(index == currentMarkerIndex)
-        {
-            int firstTop = top;
-            top += lineHeight + padY;
-            bottom += lineHeight + padY;
-            Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, top, bottom, thisMarker->OutputPlayCursor, playColour);
-            Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, top, bottom, thisMarker->OutputWriteCursor, writeColour);
-            
-            top += lineHeight + padY;
-            bottom += lineHeight + padY;
-            Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, top, bottom, thisMarker->OutputLocation, playColour);
-            Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, top, bottom, (thisMarker->OutputLocation + thisMarker->OutputByteCount), writeColour);
-            
-            top += lineHeight + padY;
-            bottom += lineHeight + padY;
-            Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, firstTop, bottom, thisMarker->ExpectedFlipPlayCursor, expectedFlipColour);
-        }
-        
-        Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, top, bottom, thisMarker->FlipPlayCursor, playColour);
-        Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, top, bottom, (thisMarker->FlipPlayCursor + 480 * soundBuffer->BytesPerSample), playWindowColour);
-        Win32DrawSoundbufferMarker(backBuffer, soundBuffer, C, padX, top, bottom, thisMarker->FlipWriteCursor, writeColour);
-    }
-}
-#endif
-
-static void ProcessProfilingResults(MP_MEMORY* gameMemory)
-{
-    #if MP_INTERNAL
-    OutputDebugStringA("Cycle counts:\n");
-    for(int counterIndex = 0; counterIndex < ArrayCount(gameMemory->CycleCounters); counterIndex++)
-    {
-        debug_cycle_counter* counter = gameMemory->CycleCounters + counterIndex;
-        char buffer[256];
-        _snprintf_s(buffer, sizeof(buffer), "    %d: cycles: %I64u, hits: %d\n", counterIndex, counter->CycleCount, counter->HitCount);
-        OutputDebugStringA(buffer);
-        counter->CycleCount = 0;
-        counter->HitCount = 0;
-    }
-    OutputDebugStringA("\n");
-    #endif
-}
 
 INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLine, INT showCode)
 {
@@ -928,6 +837,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             win32State.GameMemoryBlock = VirtualAlloc(baseAddress, win32State.TotalSize, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
             memory.PermanentStorage = win32State.GameMemoryBlock;
             memory.TransientStorage = ((uint8*)memory.PermanentStorage + memory.PermanentStorageSize);
+            memory.TransientStorageStart = memory.TransientStorage;
             
             for(int replayIndex = 0; replayIndex < ArrayCount(win32State.ReplayBuffers); replayIndex++)
             {
@@ -1093,15 +1003,15 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     if(game.UpdateAndRender)
                     {
+                        PROFILE_SCOPE_START(Gameupdate)
                         renderData = game.UpdateAndRender(&thread, &memory, newInput, deltaTime);
+                        PROFILE_SCOPE_END(Gameupdate)
                     }
                     
-                    PROFILE_BLOCK_START(VulkanUpdate);
+                    PROFILE_SCOPE_START(Vulkan_Update)
                     VulkanUpdate(vkData, GlobalWindowInfo.Width, GlobalWindowInfo.Height, renderData);
-                    PROFILE_BLOCK_END(VulkanUpdate);
+                    PROFILE_SCOPE_END(Vulkan_Update)
                     
-                    ProcessProfilingResults(&memory);
-                        
                     LARGE_INTEGER audioClock = Win32GetClockValue();
                     float fromBeginToAudioSeconds = Win32GetSecondsElapsed(flipClock, audioClock);
                     
@@ -1214,20 +1124,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
                     
                     flipClock = Win32GetClockValue();
-                    
-                    // TODO: REMOVE
-                    #if 0
-                    {
-                        if(GlobalSecondaryBuffer->GetCurrentPosition(&playCursor, &writeCursor) == DS_OK)
-                        {
-                            MP_ASSERT(debugTimeMarkerIndex < ArrayCount(debugTimeMarkers))
-                            Win32DebugTimeMarker* marker = &debugTimeMarkers[debugTimeMarkerIndex];
-                            marker->FlipPlayCursor = playCursor;
-                            marker->FlipWriteCursor = writeCursor;
-                        }
-                    }
-                    #endif
-                    
+                                        
                     // TODO: Swap macro
                     MP_INPUT* temp = newInput;
                     newInput = oldInput;
@@ -1246,14 +1143,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     OutputDebugStringA(fpsBuffer);
                     #endif
                     
-                    // TODO: REMOVE
-                    #if 0
-                    debugTimeMarkerIndex++;
-                    if(debugTimeMarkerIndex == ArrayCount(debugTimeMarkers))
-                    {
-                        debugTimeMarkerIndex = 0;
-                    }
-                    #endif
+                    PrintProfilerResults();
                 }
                 
                 VulkanCleanup(vkData);
