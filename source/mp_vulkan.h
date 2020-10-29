@@ -70,10 +70,10 @@ struct VulkanData
     VkCommandPool CommandPool;
     VkCommandBuffer Commandbuffers[MP_VK_SWAP_CHAIN_BUFFER_COUNT];
     
-    VkBuffer Vertexbuffer;
-    VkDeviceMemory VertexbufferMemory;
-    VkBuffer Indexbuffer;
-    VkDeviceMemory IndexbufferMemory;
+    VkBuffer Vertexbuffers[3];
+    VkDeviceMemory VertexbufferMemories[3];
+    VkBuffer Indexbuffers[3];
+    VkDeviceMemory IndexbufferMemories[3];
     VkBuffer Uniformbuffers[MP_VK_SWAP_IMAGE_MAX];
     VkDeviceMemory UniformbuffersMemory[MP_VK_SWAP_IMAGE_MAX];
     

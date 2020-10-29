@@ -960,35 +960,38 @@ static void CopyBuffer(const VulkanData* renderer, VkBuffer srcBuffer, VkBuffer 
 }
 
 static void CreateGeometryBuffers(VulkanData* renderer, MP_RENDERDATA* renderData)
-{    
-    VkDeviceSize vertbufferSize = sizeof(renderData->Cubes[0].Vertices);
-    VkDeviceSize indexbufferSize = sizeof(renderData->Cubes[0].Indices);
-    uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-    VkBuffer vertStagingbuffer, indexStagingbuffer;
-    VkDeviceMemory vertStagingbufferMemory, indexStagingbufferMemory;
-    void* vertData;
-    void* indexData;
-    VkBufferUsageFlags vertUsageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    VkBufferUsageFlags indexUsageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-    
-    CreateBuffer(renderer, vertbufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &vertStagingbuffer, &vertStagingbufferMemory);
-    CreateBuffer(renderer, indexbufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &indexStagingbuffer, &indexStagingbufferMemory);
-    vkMapMemory(renderer->Device, vertStagingbufferMemory, 0, vertbufferSize, 0, &vertData);
-    vkMapMemory(renderer->Device, indexStagingbufferMemory, 0, indexbufferSize, 0, &indexData);
-    memcpy(vertData, renderData->Cubes[0].Vertices, (uint64)vertbufferSize);
-    memcpy(indexData, renderData->Cubes[0].Indices, (uint64)indexbufferSize);
-    vkUnmapMemory(renderer->Device, vertStagingbufferMemory);
-    vkUnmapMemory(renderer->Device, indexStagingbufferMemory);
-    
-    CreateBuffer(renderer, vertbufferSize, vertUsageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &renderer->Vertexbuffer, &renderer->VertexbufferMemory);
-    CreateBuffer(renderer, indexbufferSize, indexUsageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &renderer->Indexbuffer, &renderer->IndexbufferMemory);
-    CopyBuffer(renderer, vertStagingbuffer, renderer->Vertexbuffer, vertbufferSize);
-    CopyBuffer(renderer, indexStagingbuffer, renderer->Indexbuffer, indexbufferSize);
-    
-    vkDestroyBuffer(renderer->Device, vertStagingbuffer, nullptr);
-    vkDestroyBuffer(renderer->Device, indexStagingbuffer, nullptr);
-    vkFreeMemory(renderer->Device, vertStagingbufferMemory, nullptr);
-    vkFreeMemory(renderer->Device, indexStagingbufferMemory, nullptr);
+{
+    for(uint32 i = 0; i < 3; i++)
+    {
+        VkDeviceSize vertbufferSize = sizeof(renderData->Cubes[i].Vertices);
+        VkDeviceSize indexbufferSize = sizeof(renderData->Cubes[i].Indices);
+        uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        VkBuffer vertStagingbuffer, indexStagingbuffer;
+        VkDeviceMemory vertStagingbufferMemory, indexStagingbufferMemory;
+        void* vertData;
+        void* indexData;
+        VkBufferUsageFlags vertUsageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        VkBufferUsageFlags indexUsageDstFlags = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+        
+        CreateBuffer(renderer, vertbufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &vertStagingbuffer, &vertStagingbufferMemory);
+        CreateBuffer(renderer, indexbufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &indexStagingbuffer, &indexStagingbufferMemory);
+        vkMapMemory(renderer->Device, vertStagingbufferMemory, 0, vertbufferSize, 0, &vertData);
+        vkMapMemory(renderer->Device, indexStagingbufferMemory, 0, indexbufferSize, 0, &indexData);
+        memcpy(vertData, renderData->Cubes[i].Vertices, (uint64)vertbufferSize);
+        memcpy(indexData, renderData->Cubes[i].Indices, (uint64)indexbufferSize);
+        vkUnmapMemory(renderer->Device, vertStagingbufferMemory);
+        vkUnmapMemory(renderer->Device, indexStagingbufferMemory);
+        
+        CreateBuffer(renderer, vertbufferSize, vertUsageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &renderer->Vertexbuffers[i], &renderer->VertexbufferMemories[i]);
+        CreateBuffer(renderer, indexbufferSize, indexUsageDstFlags, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &renderer->Indexbuffers[i], &renderer->IndexbufferMemories[i]);
+        CopyBuffer(renderer, vertStagingbuffer, renderer->Vertexbuffers[i], vertbufferSize);
+        CopyBuffer(renderer, indexStagingbuffer, renderer->Indexbuffers[i], indexbufferSize);
+        
+        vkDestroyBuffer(renderer->Device, vertStagingbuffer, nullptr);
+        vkDestroyBuffer(renderer->Device, indexStagingbuffer, nullptr);
+        vkFreeMemory(renderer->Device, vertStagingbufferMemory, nullptr);
+        vkFreeMemory(renderer->Device, indexStagingbufferMemory, nullptr);
+    }
 }
 
 static void CreateUniformbuffers(VulkanData* renderer)
@@ -1107,16 +1110,16 @@ static void CreateCommandBuffers(VulkanData* renderer, MP_RENDERDATA* renderData
 
         vkCmdBeginRenderPass(renderer->Commandbuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(renderer->Commandbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->GraphicsPipeline);
-
-        VkBuffer vertexBuffers[] = { renderer->Vertexbuffer };
+        
         VkDeviceSize offsets[] = { 0 };
         
-        // TODO: Do this per unique 3D object!
-        vkCmdBindVertexBuffers(renderer->Commandbuffers[i], 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(renderer->Commandbuffers[i], renderer->Indexbuffer, 0, VK_INDEX_TYPE_UINT16);
-        vkCmdBindDescriptorSets(renderer->Commandbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->PipelineLayout, 0, 1, &renderer->DescriptorSets[i], 0, nullptr);
-        vkCmdDrawIndexed(renderer->Commandbuffers[i], ArrayCount(renderData->Cubes[0].Indices), 1, 0, 0, 0);
-        // ----------------------------------
+        for(uint32 j = 0; j < 3; j++)
+        {
+            vkCmdBindVertexBuffers(renderer->Commandbuffers[i], 0, 1, &renderer->Vertexbuffers[j], offsets);
+            vkCmdBindIndexBuffer(renderer->Commandbuffers[i], renderer->Indexbuffers[j], 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindDescriptorSets(renderer->Commandbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->PipelineLayout, 0, 1, &renderer->DescriptorSets[i], 0, nullptr);
+            vkCmdDrawIndexed(renderer->Commandbuffers[i], ArrayCount(renderData->Cubes[0].Indices), 1, 0, 0, 0);
+        }
         
         vkCmdEndRenderPass(renderer->Commandbuffers[i]);
 
@@ -1334,12 +1337,15 @@ void VulkanCleanup(VulkanData* renderer)
     vkFreeMemory(renderer->Device, renderer->TextureImageMemory, nullptr);
 
     vkDestroyDescriptorSetLayout(renderer->Device, renderer->DescriptorSetLayout, nullptr);
-
-    vkDestroyBuffer(renderer->Device, renderer->Indexbuffer, nullptr);
-    vkFreeMemory(renderer->Device, renderer->IndexbufferMemory, nullptr);
-    vkDestroyBuffer(renderer->Device, renderer->Vertexbuffer, nullptr);
-    vkFreeMemory(renderer->Device, renderer->VertexbufferMemory, nullptr);
-
+    
+    for(uint32 j = 0; j < 3; j++)
+    {
+        vkDestroyBuffer(renderer->Device, renderer->Indexbuffers[j], nullptr);
+        vkFreeMemory(renderer->Device, renderer->IndexbufferMemories[j], nullptr);
+        vkDestroyBuffer(renderer->Device, renderer->Vertexbuffers[j], nullptr);
+        vkFreeMemory(renderer->Device, renderer->VertexbufferMemories[j], nullptr);
+    }
+    
     for(uint32 i = 0; i < MP_VK_FRAMES_IN_FLIGHT_MAX; i++)
     {
         vkDestroySemaphore(renderer->Device, renderer->ImageAvailableSemaphores[i], nullptr);

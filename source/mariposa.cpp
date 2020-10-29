@@ -14,11 +14,11 @@ internal void OutputSound(MP_GAMESTATE* gameState, MP_SOUNDOUTPUTBUFFER* soundBu
     }
 }
 
-internal void TranslateCube(Cube* cube, vec3 newPos)
+internal void TranslateCube(Cube* cube, vec3 offset)
 {
     for(uint32 i = 0; i < ArrayCount(cube->Vertices); i++)
     {
-        
+        cube->Vertices[i].Position += offset;
     }
 }
 
@@ -55,7 +55,7 @@ internal void BuildCubes(Cube* cubes, uint32 cubeCount)
         for(uint16 row = 0; row < 6; row++)
         {
             uint16 rowOffset = row * 6;
-            uint16 indexOffset = 4 * row + 24 * (uint16)i;
+            uint16 indexOffset = 4 * row;
             cubes[i].Indices[rowOffset]     = 0 + indexOffset;
             cubes[i].Indices[rowOffset + 1] = 1 + indexOffset;
             cubes[i].Indices[rowOffset + 2] = 2 + indexOffset;
@@ -74,8 +74,8 @@ MP_API BUILD_WORLD(BuildWorld)
     renderData->CameraPosition = {2.0f, 2.0f, 2.0f};
     
     BuildCubes(renderData->Cubes, ArrayCount(renderData->Cubes));
-    TranslateCube(&renderData->Cubes[1], {3.0f, 3.0f, 3.0f});
-    TranslateCube(&renderData->Cubes[2], {5.0f, 5.0f, 5.0f});
+    TranslateCube(&renderData->Cubes[1], {1.2f, 0.0f, 0.0f});
+    TranslateCube(&renderData->Cubes[2], {2.4f, 0.0f, 0.0f});
     
     return renderData;
 }
