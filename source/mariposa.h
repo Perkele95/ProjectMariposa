@@ -21,26 +21,39 @@ inline internal MP_CONTROLLER_INPUT* GetController(MP_INPUT* input, int controll
 
 struct Vertex
 {
-    Vector3 Position;
-    Vector3 Colour;
-    Vector2 TexCoord;
+    vec3 Position;
+    vec3 Colour;
+    vec2 TexCoord;
+};
+
+struct Cube
+{
+    Vertex Vertices[24];
+    uint16 Indices[36];
 };
 
 struct MP_RENDERDATA
 {
     // TODO: Put into Camera struct sort of thing
-    Vector3 CameraPosition;
-    Vector3 CameraRotation;
+    vec3 CameraPosition;
+    vec3 CameraRotation;
+    
+    Cube Cubes[3];
 };
 
-#define GAME_UPDATE_AND_RENDER(name) MP_RENDERDATA* name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_INPUT* input, float timestep)
+#define MP_API extern"C" __declspec(dllexport)
+
+#define GAME_UPDATE_AND_RENDER(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_INPUT* input, MP_RENDERDATA* renderData, float timestep)
 typedef GAME_UPDATE_AND_RENDER(game_update_and_render);
 
 // NOTE: This function needs to be fast to keep audio latency low
 #define GET_SOUND_SAMPLES(name) void name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory, MP_SOUNDOUTPUTBUFFER* soundBuffer)
 typedef GET_SOUND_SAMPLES(get_sound_samples);
 
+#define BUILD_WORLD(name) MP_RENDERDATA* name(MP_THREAD_CONTEXT* thread, MP_MEMORY* memory)
+typedef BUILD_WORLD(build_world);
+
 struct MP_GAMESTATE
 {
-    MP_RENDERDATA RenderData;
+    MP_RENDERDATA* RenderData;
 };

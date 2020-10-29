@@ -959,10 +959,10 @@ static void CopyBuffer(const VulkanData* renderer, VkBuffer srcBuffer, VkBuffer 
     EndSingleTimeCommands(renderer, commandBuffer);
 }
 
-static void CreateGeometryBuffers(VulkanData* renderer)
-{
-    VkDeviceSize vertbufferSize = sizeof(gVertices);
-    VkDeviceSize indexbufferSize = sizeof(gIndices);
+static void CreateGeometryBuffers(VulkanData* renderer, MP_RENDERDATA* renderData)
+{    
+    VkDeviceSize vertbufferSize = sizeof(renderData->Cubes[0].Vertices);
+    VkDeviceSize indexbufferSize = sizeof(renderData->Cubes[0].Indices);
     uint32 bufferSrcFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     VkBuffer vertStagingbuffer, indexStagingbuffer;
     VkDeviceMemory vertStagingbufferMemory, indexStagingbufferMemory;
@@ -975,8 +975,8 @@ static void CreateGeometryBuffers(VulkanData* renderer)
     CreateBuffer(renderer, indexbufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, bufferSrcFlags, &indexStagingbuffer, &indexStagingbufferMemory);
     vkMapMemory(renderer->Device, vertStagingbufferMemory, 0, vertbufferSize, 0, &vertData);
     vkMapMemory(renderer->Device, indexStagingbufferMemory, 0, indexbufferSize, 0, &indexData);
-    memcpy(vertData, gVertices, (uint64)vertbufferSize);
-    memcpy(indexData, gIndices, (uint64)indexbufferSize);
+    memcpy(vertData, renderData->Cubes[0].Vertices, (uint64)vertbufferSize);
+    memcpy(indexData, renderData->Cubes[0].Indices, (uint64)indexbufferSize);
     vkUnmapMemory(renderer->Device, vertStagingbufferMemory);
     vkUnmapMemory(renderer->Device, indexStagingbufferMemory);
     
@@ -1070,7 +1070,7 @@ static void CreateDescriptorSets(VulkanData* renderer)
     }
 }
 
-static void CreateCommandBuffers(VulkanData* renderer)
+static void CreateCommandBuffers(VulkanData* renderer, MP_RENDERDATA* renderData)
 {
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1115,7 +1115,7 @@ static void CreateCommandBuffers(VulkanData* renderer)
         vkCmdBindVertexBuffers(renderer->Commandbuffers[i], 0, 1, vertexBuffers, offsets);
         vkCmdBindIndexBuffer(renderer->Commandbuffers[i], renderer->Indexbuffer, 0, VK_INDEX_TYPE_UINT16);
         vkCmdBindDescriptorSets(renderer->Commandbuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->PipelineLayout, 0, 1, &renderer->DescriptorSets[i], 0, nullptr);
-        vkCmdDrawIndexed(renderer->Commandbuffers[i], ArrayCount(gIndices), 1, 0, 0, 0);
+        vkCmdDrawIndexed(renderer->Commandbuffers[i], ArrayCount(renderData->Cubes[0].Indices), 1, 0, 0, 0);
         // ----------------------------------
         
         vkCmdEndRenderPass(renderer->Commandbuffers[i]);
@@ -1178,7 +1178,7 @@ static void CleanUpSwapChain(VulkanData* renderer)
     vkDestroyDescriptorPool(renderer->Device, renderer->DescriptorPool, nullptr);
 }
 
-static void RecreateSwapChain(VulkanData* renderer, int windowWidth, int windowHeight)
+static void RecreateSwapChain(VulkanData* renderer, int windowWidth, int windowHeight, MP_RENDERDATA* renderData)
 {    
     vkDeviceWaitIdle(renderer->Device);
 
@@ -1193,10 +1193,10 @@ static void RecreateSwapChain(VulkanData* renderer, int windowWidth, int windowH
     CreateUniformbuffers(renderer);
     CreateDescriptorPool(renderer);
     CreateDescriptorSets(renderer);
-    CreateCommandBuffers(renderer);
+    CreateCommandBuffers(renderer, renderData);
 }
 
-VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_read_file_result* vertShader, debug_read_file_result* fragShader)
+VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_read_file_result* vertShader, debug_read_file_result* fragShader, MP_RENDERDATA* renderData)
 {
     VulkanData* renderer = (VulkanData*) PushBackPermanentStorage(memory, sizeof(VulkanData));
     
@@ -1225,11 +1225,11 @@ VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_rea
     CreateTextureImage(renderer);
     CreateTextureImageView(renderer);
     CreateTextureSampler(renderer);
-    CreateGeometryBuffers(renderer);
+    CreateGeometryBuffers(renderer, renderData);
     CreateUniformbuffers(renderer);
     CreateDescriptorPool(renderer);
     CreateDescriptorSets(renderer);
-    CreateCommandBuffers(renderer);
+    CreateCommandBuffers(renderer, renderData);
     CreateSyncObjects(renderer);
 
     return renderer;
@@ -1239,7 +1239,7 @@ static void UpdateUniformbuffer(uint32 currentImage, VulkanData* renderer, MP_RE
 {
     UniformbufferObject ubo = {};
 
-    ubo.Model = Mat4RotateZ(renderData->CameraRotation.Z);
+    ubo.Model = Mat4x4Identity();
     ubo.View = LookAt(renderData->CameraPosition, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}) * Mat4RotateX(renderData->CameraRotation.X) * Mat4RotateY(renderData->CameraRotation.Y);
     ubo.Proj = Perspective(PI32 / 4.0f, (float)renderer->SwapChainExtent.width / (float)renderer->SwapChainExtent.height, 0.1f, 10.0f);
 
@@ -1263,7 +1263,7 @@ void VulkanUpdate(VulkanData* renderer, int windowWidth, int windowHeight, MP_RE
     VkResult imageResult = vkAcquireNextImageKHR(renderer->Device, renderer->SwapChain, UINT64MAX, renderer->ImageAvailableSemaphores[renderer->currentFrame], VK_NULL_HANDLE, &imageIndex);
     if(imageResult == VK_ERROR_OUT_OF_DATE_KHR)
     {
-        RecreateSwapChain(renderer, windowWidth, windowHeight);
+        RecreateSwapChain(renderer, windowWidth, windowHeight, renderData);
         return;
     }
     else if(imageResult != VK_SUCCESS && imageResult != VK_SUBOPTIMAL_KHR)
@@ -1314,7 +1314,7 @@ void VulkanUpdate(VulkanData* renderer, int windowWidth, int windowHeight, MP_RE
     if(presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || renderer->FramebufferResized)
     {
         *(renderer->FramebufferResized) = false;
-        RecreateSwapChain(renderer, windowWidth, windowHeight);
+        RecreateSwapChain(renderer, windowWidth, windowHeight, renderData);
     }
     else if(presentResult != VK_SUCCESS)
     {

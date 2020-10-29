@@ -45,6 +45,7 @@ struct Win32GameCode
     // IMPORTANT: Callbacks need to be null-checked before usage
     game_update_and_render* UpdateAndRender;
     get_sound_samples* GetSoundSamples;
+    build_world* BuildWorld;
     bool32 IsValid;
 };
 

@@ -125,6 +125,18 @@ struct mat4x4
     float data[4][4];
 };
 
+inline mat4x4 Mat4x4Identity()
+{
+    mat4x4 result = {
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    
+    return result;
+}
+
 mat4x4 operator*(mat4x4 a, mat4x4 b)
 {
     mat4x4 result = {};

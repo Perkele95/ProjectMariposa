@@ -12,7 +12,7 @@ REM cl %CommonCompilerFlags%  ..\source\win32_mariposa.cpp /link -subsystem:wind
 REM x64 build
 del *pdb > NUL 2> NUL
 echo WAITING FOR PDB > lock.tmp
-cl %CommonCompilerFlags% -Fmmariposa.map ..\source\mariposa.cpp -LD /link -incremental:no -opt:ref -PDB:mariposa_%random%.pdb -EXPORT:GameUpdateAndRender -EXPORT:GetSoundSamples
+cl %CommonCompilerFlags% -Fmmariposa.map ..\source\mariposa.cpp -LD /link -incremental:no -opt:ref -PDB:mariposa_%random%.pdb
 del lock.tmp
 cl %CommonCompilerFlags% -Fmwin32_mariposa.map ..\source\win32_mariposa.cpp /link /LIBPATH:..\Vulkan\Lib\vulkan-1.lib %CommonLinkerFlags%
 popd

@@ -184,8 +184,9 @@ internal Win32GameCode Win32LoadGameCode(char* sourceDLLName, char* tempDLLName,
         {
             result.UpdateAndRender = (game_update_and_render*)GetProcAddress(result.DLL, "GameUpdateAndRender");
             result.GetSoundSamples = (get_sound_samples*)GetProcAddress(result.DLL, "GetSoundSamples");
+            result.BuildWorld = (build_world*)GetProcAddress(result.DLL, "BuildWorld");
             
-            result.IsValid = (result.UpdateAndRender && result.GetSoundSamples);
+            result.IsValid = (result.UpdateAndRender && result.GetSoundSamples && result.BuildWorld);
         }
     }
     
@@ -193,6 +194,7 @@ internal Win32GameCode Win32LoadGameCode(char* sourceDLLName, char* tempDLLName,
     {
         result.UpdateAndRender = 0;
         result.GetSoundSamples = 0;
+        result.BuildWorld = 0;
     }
     
     return result;
@@ -209,6 +211,7 @@ internal void Win32UnloadGameCode(Win32GameCode* gameCode)
     gameCode->IsValid = false;
     gameCode->UpdateAndRender = 0;
     gameCode->GetSoundSamples = 0;
+    gameCode->BuildWorld = 0;
 }
 
 internal void Win32LoadXInput(void)
@@ -769,11 +772,11 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                 Win32GameCode game = Win32LoadGameCode(sourceDLLFullPath, tempDLLFullPath, lockFullPath);
                 
                 VulkanData* vkData;
-                MP_RENDERDATA* renderData = nullptr;
+                MP_RENDERDATA* renderData = game.BuildWorld(&thread, &memory);
                 
                 debug_read_file_result vertShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/vert.spv");
                 debug_read_file_result fragShader = DEBUGPlatformReadEntireFile(&thread, "../source/Shaders/frag.spv");
-                vkData = VulkanInit(&memory, &GlobalWindowInfo, &vertShader, &fragShader);
+                vkData = VulkanInit(&memory, &GlobalWindowInfo, &vertShader, &fragShader, renderData);
                 
                 vkData->FramebufferResized = &GlobalWindowInfo.WindowResized;
                 
@@ -881,7 +884,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     if(game.UpdateAndRender)
                     {
                         PROFILE_SCOPE_START(Gameupdate)
-                        renderData = game.UpdateAndRender(&thread, &memory, newInput, deltaTime);
+                        game.UpdateAndRender(&thread, &memory, newInput, renderData, deltaTime);
                         PROFILE_SCOPE_END(Gameupdate)
                     }
                     
