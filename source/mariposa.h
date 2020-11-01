@@ -38,7 +38,8 @@ struct MP_RENDERDATA
     vec3 CameraPosition;
     vec3 CameraRotation;
     
-    Cube Cubes[3];
+    Cube* Cubes;
+    uint32 CubeCount;
 };
 
 #define MP_API extern"C" __declspec(dllexport)

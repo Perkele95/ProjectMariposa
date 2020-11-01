@@ -892,7 +892,7 @@ static void CopyBufferToImage(const VulkanData* renderer, VkBuffer buffer, uint3
 static void CreateTextureImage(VulkanData* renderer)
 {
     int texWidth, texHeight;
-    uint8* pixels = stbi_load("../assets/dirt.png", &texWidth, &texHeight, nullptr, STBI_rgb_alpha);
+    uint8* pixels = stbi_load("../assets/white_pixel.png", &texWidth, &texHeight, nullptr, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * texHeight * 4;  // 4 = bytes per pixel
 
     VkBuffer stagingbuffer;
@@ -961,7 +961,7 @@ static void CopyBuffer(const VulkanData* renderer, VkBuffer srcBuffer, VkBuffer 
 
 static void CreateGeometryBuffers(VulkanData* renderer, MP_RENDERDATA* renderData)
 {
-    for(uint32 i = 0; i < 3; i++)
+    for(uint32 i = 0; i < renderData->CubeCount; i++)
     {
         VkDeviceSize vertbufferSize = sizeof(renderData->Cubes[i].Vertices);
         VkDeviceSize indexbufferSize = sizeof(renderData->Cubes[i].Indices);
@@ -1113,7 +1113,7 @@ static void CreateCommandBuffers(VulkanData* renderer, MP_RENDERDATA* renderData
         
         VkDeviceSize offsets[] = { 0 };
         
-        for(uint32 j = 0; j < 3; j++)
+        for(uint32 j = 0; j < renderData->CubeCount; j++)
         {
             vkCmdBindVertexBuffers(renderer->Commandbuffers[i], 0, 1, &renderer->Vertexbuffers[j], offsets);
             vkCmdBindIndexBuffer(renderer->Commandbuffers[i], renderer->Indexbuffers[j], 0, VK_INDEX_TYPE_UINT16);
@@ -1327,7 +1327,7 @@ void VulkanUpdate(VulkanData* renderer, int windowWidth, int windowHeight, MP_RE
     renderer->currentFrame = (renderer->currentFrame + 1) % MP_VK_FRAMES_IN_FLIGHT_MAX;
 }
 
-void VulkanCleanup(VulkanData* renderer)
+void VulkanCleanup(VulkanData* renderer, MP_RENDERDATA* renderData)
 {
     CleanUpSwapChain(renderer);
 
@@ -1338,7 +1338,7 @@ void VulkanCleanup(VulkanData* renderer)
 
     vkDestroyDescriptorSetLayout(renderer->Device, renderer->DescriptorSetLayout, nullptr);
     
-    for(uint32 j = 0; j < 3; j++)
+    for(uint32 j = 0; j < renderData->CubeCount; j++)
     {
         vkDestroyBuffer(renderer->Device, renderer->Indexbuffers[j], nullptr);
         vkFreeMemory(renderer->Device, renderer->IndexbufferMemories[j], nullptr);

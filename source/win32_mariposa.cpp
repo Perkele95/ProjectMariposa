@@ -1026,7 +1026,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     PrintProfilerResults();
                 }
                 
-                VulkanCleanup(vkData);
+                VulkanCleanup(vkData, renderData);
                 DEBUGPlatformFreeFileMemory(&thread, vertShader.data);
                 DEBUGPlatformFreeFileMemory(&thread, fragShader.data);
             }
