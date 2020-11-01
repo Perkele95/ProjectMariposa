@@ -11,7 +11,7 @@
 #include "mp_vulkan.cpp"
 
 #if MP_INTERNAL
-     //#define PROFILER_ENABLE
+     #define PROFILER_ENABLE
 #endif
 #include "profiler.h"
 
@@ -456,16 +456,7 @@ internal void Win32ToggleFullScreen(HWND window)
     }
 }
 
-internal void CenterCursor(RECT* windowRect)
-{
-    int32 localWindowWidth = windowRect->right - windowRect->left;
-    int32 localWindowHeight = windowRect->bottom - windowRect->top;
-    int32 centerX = (localWindowWidth / 2) + windowRect->left;
-    int32 centerY = (localWindowHeight / 2) + windowRect->top;
-    SetCursorPos(centerX, centerY);
-}
-
-internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPUT* keyboardController, MP_MOUSE_INPUT* mouseInput, Win32WindowInfo* windowInfo)
+internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPUT* keyboardController, MP_MOUSE_INPUT* mouseInput)
 {
     MSG message;
     
@@ -481,23 +472,24 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
             
             case WM_MOUSEMOVE:
             {
-                int32 x = GET_X_LPARAM(message.lParam);
-                int32 y = GET_Y_LPARAM(message.lParam);
-                if(mouseInput->ShowCursor)
+                if(mouseInput->GameIsFocused)
                 {
-                    RECT windowRect;
-                    GetWindowRect(*windowInfo->pWindow, &windowRect);
+                    POINT cursorPos;
+                    GetCursorPos(&cursorPos);
+                    mouseInput->NewCursorPosX = cursorPos.x;
+                    mouseInput->NewCursorPosY = cursorPos.y;
                     
-                    if(x <= 10 || x >= (windowRect.right - windowRect.left - 50) || y <= 10 || y >= (windowRect.bottom - windowRect.top - 50))
-                    {
-                        CenterCursor(&windowRect);
-                    }
-                    // TODO: Replace with Xdelta and Ydelta
-                    mouseInput->deltaX = x - mouseInput->oldCursorPosX;
-                    mouseInput->deltaY = y - mouseInput->oldCursorPosY;
+                    RECT windowRect;
+                    GetWindowRect(*GlobalWindowInfo.pWindow, &windowRect);
+                    
+                    int32 centerX = ((windowRect.right - windowRect.left) / 2) + windowRect.left;
+                    int32 centerY = ((windowRect.bottom - windowRect.top) / 2) + windowRect.top;
+                    
+                    mouseInput->DeltaX = (float)(mouseInput->NewCursorPosX - centerX);
+                    mouseInput->DeltaY = (float)(mouseInput->NewCursorPosY - centerY);
+                    
+                    SetCursorPos(centerX, centerY);
                 }
-                mouseInput->oldCursorPosX = x;
-                mouseInput->oldCursorPosY = y;
             } break;
             case WM_LBUTTONDOWN:
             {
@@ -585,10 +577,10 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
                     {
                         // do
                     }
-                    else if(keyCode == 'K')
+                    else if(keyCode == 'K' && isDown)
                     {
-                        //ShowCursor(mouseInput->ShowCursor);
-                        mouseInput->ShowCursor = !mouseInput->ShowCursor;
+                        ShowCursor(mouseInput->GameIsFocused);
+                        mouseInput->GameIsFocused = !mouseInput->GameIsFocused;
                     }
                     else if(keyCode == VK_UP)
                     {
@@ -757,10 +749,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             memory.PermanentStorage = win32State.GameMemoryBlock;
             memory.TransientStorage = ((uint8*)memory.PermanentStorage + memory.PermanentStorageSize);
             memory.TransientStorageStart = memory.TransientStorage;
-            
-            RECT oldCursorClip, newCursorClip;
-            GetClipCursor(&oldCursorClip);
-            
+                        
             if(memory.PermanentStorage && memory.TransientStorage && samples)
             {
                 MP_INPUT input[2] = {};
@@ -811,22 +800,10 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                         newKeyboardController->Buttons[index].EndedDown = oldKeyboardController->Buttons[index].EndedDown;
                     }
                     
-                    Win32ProcessPendingMessages(&win32State, newKeyboardController, mouseInput, &GlobalWindowInfo);
+                    mouseInput->DeltaX = 0;
+                    mouseInput->DeltaY = 0;
+                    Win32ProcessPendingMessages(&win32State, newKeyboardController, mouseInput);
                     
-                    if(mouseInput->ShowCursor)
-                    {
-                        GetWindowRect(window, &newCursorClip);
-                        newCursorClip.right -= 10;
-                        newCursorClip.left += 10;
-                        newCursorClip.top += 10;
-                        newCursorClip.bottom -= 10;
-                        ClipCursor(&newCursorClip);
-                    }
-                    else
-                    {
-                        ClipCursor(&oldCursorClip);
-                    }
-                                        
                     if(GlobalPause)
                         continue;
                     
@@ -1046,7 +1023,6 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     PrintProfilerResults();
                 }
-                ClipCursor(&oldCursorClip);
                 VulkanCleanup(vkData, renderData);
                 DEBUGPlatformFreeFileMemory(&thread, vertShader.data);
                 DEBUGPlatformFreeFileMemory(&thread, fragShader.data);

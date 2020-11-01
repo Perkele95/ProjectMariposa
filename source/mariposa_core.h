@@ -21,6 +21,7 @@
 
 #define UINT64MAX 0xFFFFFFFFFFFFFFFF
 #define PI32 3.14159265359f
+#define PI32_D 6.28318530718f
 
 typedef unsigned char uint8;
 typedef unsigned short uint16;
@@ -123,8 +124,9 @@ struct MP_MOUSE_BUTTON_STATE
 
 struct MP_MOUSE_INPUT
 {
-    int32 oldCursorPosX, oldCursorPosY, deltaX, deltaY, Wheel;
-    bool32 ShowCursor;
+    int32 NewCursorPosX, NewCursorPosY, OldCursorPosX, OldCursorPosY, Wheel;
+    float DeltaX, DeltaY;
+    bool32 GameIsFocused;
     
     union
     {
@@ -161,3 +163,9 @@ struct MP_MEMORY
     debug_platform_write_entire_file* DEBUGPlatformWriteEntireFile;
     debug_platform_free_file_memory* DEBUGPlatformFreeFileMemory;
 };
+
+inline static int32 Abs32(int32 value)
+{
+    int32 mask = value >> 31;
+    return ((mask + value) ^ mask);
+}

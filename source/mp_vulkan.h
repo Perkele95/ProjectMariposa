@@ -94,6 +94,8 @@ struct VulkanData
     VkFence InFlightFences[MP_VK_FRAMES_IN_FLIGHT_MAX];
     VkFence InFlightImages[MP_VK_SWAP_IMAGE_MAX];
     
+    UniformbufferObject Ubo;
+    
     debug_read_file_result VertexShader;
     debug_read_file_result FragmentShader;
 };

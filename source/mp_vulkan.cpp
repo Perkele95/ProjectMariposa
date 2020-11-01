@@ -1199,6 +1199,13 @@ static void RecreateSwapChain(VulkanData* renderer, int windowWidth, int windowH
     CreateCommandBuffers(renderer, renderData);
 }
 
+static void PrepareUbo(VulkanData* renderer, MP_RENDERDATA* renderData)
+{
+    renderer->Ubo.Model = Mat4x4Identity();
+    renderer->Ubo.View = LookAt(renderData->CameraPosition, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
+    renderer->Ubo.Proj = Perspective(PI32 / 4.0f, (float)renderer->SwapChainExtent.width / (float)renderer->SwapChainExtent.height, 0.1f, 10.0f);
+}
+
 VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_read_file_result* vertShader, debug_read_file_result* fragShader, MP_RENDERDATA* renderData)
 {
     VulkanData* renderer = (VulkanData*) PushBackPermanentStorage(memory, sizeof(VulkanData));
@@ -1234,22 +1241,19 @@ VulkanData* VulkanInit(MP_MEMORY* memory, Win32WindowInfo* windowInfo, debug_rea
     CreateDescriptorSets(renderer);
     CreateCommandBuffers(renderer, renderData);
     CreateSyncObjects(renderer);
+    PrepareUbo(renderer, renderData);
 
     return renderer;
 }
 
 static void UpdateUniformbuffer(uint32 currentImage, VulkanData* renderer, MP_RENDERDATA* renderData)
 {
-    UniformbufferObject ubo = {};
-
-    ubo.Model = Mat4x4Identity();
-    ubo.View = LookAt(renderData->CameraPosition, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}) * Mat4RotateX(renderData->CameraRotation.X) * Mat4RotateY(renderData->CameraRotation.Y);
-    ubo.Proj = Perspective(PI32 / 4.0f, (float)renderer->SwapChainExtent.width / (float)renderer->SwapChainExtent.height, 0.1f, 10.0f);
+    renderer->Ubo.View = LookAt(renderData->CameraPosition, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}) * Mat4RotateX(renderData->CameraRotation.Y) * Mat4RotateY(renderData->CameraRotation.X);
 
     void* data;
-    VkDeviceSize dataSize = sizeof(ubo);
+    VkDeviceSize dataSize = sizeof(renderer->Ubo);
     vkMapMemory(renderer->Device, renderer->UniformbuffersMemory[currentImage], 0, dataSize, 0, &data);
-    memcpy(data, &ubo, dataSize);
+    memcpy(data, &renderer->Ubo, dataSize);
     vkUnmapMemory(renderer->Device, renderer->UniformbuffersMemory[currentImage]);
 }
 

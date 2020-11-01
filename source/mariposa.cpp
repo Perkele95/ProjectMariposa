@@ -77,6 +77,7 @@ MP_API BUILD_WORLD(BuildWorld)
     renderData->CubeCount = 24;
     memory->PermanentStorage = (Cube*) memory->PermanentStorage + renderData->CubeCount;
     renderData->CameraPosition = {5.0f, 5.0f, 5.0f};
+    renderData->CameraSpeed = 0.001f;
     
     BuildCubes(renderData->Cubes, renderData->CubeCount);
     
@@ -114,29 +115,17 @@ MP_API GAME_UPDATE_AND_RENDER(GameUpdateAndRender)
         }
         else
         {
-            if(controller->Up.EndedDown)
-            {
-                renderData->CameraRotation.X += timestep;
-            }
-            else if(controller->Down.EndedDown)
-            {
-                renderData->CameraRotation.X -= timestep;
-            }
-            if(controller->Left.EndedDown)
-            {
-                renderData->CameraRotation.Y += timestep;
-            }
-            else if(controller->Right.EndedDown)
-            {
-                renderData->CameraRotation.Y -= timestep;
-            }
+            
         }
     }
     
-    if(input[0].Mouse.Wheel)
-    {
-        // mouse wheel
-    }
+    renderData->CameraRotation.X -= renderData->CameraSpeed * input[0].Mouse.DeltaX;
+    renderData->CameraRotation.Y -= renderData->CameraSpeed * input[0].Mouse.DeltaY;
+    
+    if(renderData->CameraRotation.X > PI32_D)
+        renderData->CameraRotation.X -= PI32_D;
+    if(renderData->CameraRotation.Y > PI32_D)
+        renderData->CameraRotation.Y -= PI32_D;
 }
 
 MP_API GET_SOUND_SAMPLES(GetSoundSamples)

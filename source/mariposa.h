@@ -37,6 +37,7 @@ struct MP_RENDERDATA
     // TODO: Put into Camera struct sort of thing
     vec3 CameraPosition;
     vec3 CameraRotation;
+    float CameraSpeed;
     
     Cube* Cubes;
     uint32 CubeCount;
@@ -56,5 +57,5 @@ typedef BUILD_WORLD(build_world);
 
 struct MP_GAMESTATE
 {
-    MP_RENDERDATA* RenderData;
+    
 };
