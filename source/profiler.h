@@ -14,6 +14,7 @@ struct profile_result
 static profile_result ProfileResults[30] = {0};
 static uint32_t ProfilerCount = 0;
 
+#ifdef PROFILER_ENABLE
 static void _ProfilerPushBackResult(char* ID, uint64_t cycleCount)
 {
     for(uint32_t i = 0; i < ProfilerCount; i++)
@@ -28,9 +29,11 @@ static void _ProfilerPushBackResult(char* ID, uint64_t cycleCount)
     ProfileResults[ProfilerCount] = {ID, cycleCount, 1};
     ProfilerCount++;
 }
+#endif
 
 void PrintProfilerResults()
 {
+#ifdef PROFILER_ENABLE
     OutputDebugStringA("Profiler:\n");
     for(uint32_t i = 0; i < ProfilerCount; i++)
     {
@@ -42,6 +45,7 @@ void PrintProfilerResults()
         ProfileResults[i].CycleCount = 0;
         ProfileResults[i].HitCount = 0;
     }
+#endif
 }
 
 #ifdef PROFILER_ENABLE

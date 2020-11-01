@@ -11,7 +11,7 @@
 #include "mp_vulkan.cpp"
 
 #if MP_INTERNAL
-    #define PROFILER_ENABLE
+     //#define PROFILER_ENABLE
 #endif
 #include "profiler.h"
 
@@ -302,18 +302,6 @@ internal void Win32InitDirectSound(HWND window, int32 samplesPerSecond, int32 bu
 }
 // ------------------------------------------------------------
 
-internal Win32WindowDimensions Win32GetWindowDimensions(HWND window)
-{
-    Win32WindowDimensions result;
-    
-    RECT clientRect;
-    GetClientRect(window, &clientRect);
-    result.width = clientRect.right - clientRect.left;
-    result.height = clientRect.bottom - clientRect.top;
-    
-    return result;
-}
-
 LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
     LRESULT result = 0;
@@ -322,11 +310,6 @@ LRESULT CALLBACK Win32MainWindowCallback(HWND window, UINT message, WPARAM wPara
     {
         case WM_SIZE:
         {
-            if(wParam == SIZE_MINIMIZED)
-            {
-                
-            }
-            
             GlobalWindowInfo.Width = (int32)(lParam & 0x0000FFFF);
             GlobalWindowInfo.Height = (int32)(lParam >> 16);
             GlobalWindowInfo.WindowResized = true;
@@ -473,6 +456,15 @@ internal void Win32ToggleFullScreen(HWND window)
     }
 }
 
+internal void CenterCursor(RECT* windowRect)
+{
+    int32 localWindowWidth = windowRect->right - windowRect->left;
+    int32 localWindowHeight = windowRect->bottom - windowRect->top;
+    int32 centerX = (localWindowWidth / 2) + windowRect->left;
+    int32 centerY = (localWindowHeight / 2) + windowRect->top;
+    SetCursorPos(centerX, centerY);
+}
+
 internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPUT* keyboardController, MP_MOUSE_INPUT* mouseInput, Win32WindowInfo* windowInfo)
 {
     MSG message;
@@ -489,8 +481,23 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
             
             case WM_MOUSEMOVE:
             {
-                mouseInput->X = GET_X_LPARAM(message.lParam);
-                mouseInput->Y = GET_Y_LPARAM(message.lParam);
+                int32 x = GET_X_LPARAM(message.lParam);
+                int32 y = GET_Y_LPARAM(message.lParam);
+                if(mouseInput->ShowCursor)
+                {
+                    RECT windowRect;
+                    GetWindowRect(*windowInfo->pWindow, &windowRect);
+                    
+                    if(x <= 10 || x >= (windowRect.right - windowRect.left - 50) || y <= 10 || y >= (windowRect.bottom - windowRect.top - 50))
+                    {
+                        CenterCursor(&windowRect);
+                    }
+                    // TODO: Replace with Xdelta and Ydelta
+                    mouseInput->deltaX = x - mouseInput->oldCursorPosX;
+                    mouseInput->deltaY = y - mouseInput->oldCursorPosY;
+                }
+                mouseInput->oldCursorPosX = x;
+                mouseInput->oldCursorPosY = y;
             } break;
             case WM_LBUTTONDOWN:
             {
@@ -580,7 +587,7 @@ internal void Win32ProcessPendingMessages(Win32State* state , MP_CONTROLLER_INPU
                     }
                     else if(keyCode == 'K')
                     {
-                        ShowCursor(mouseInput->ShowCursor);
+                        //ShowCursor(mouseInput->ShowCursor);
                         mouseInput->ShowCursor = !mouseInput->ShowCursor;
                     }
                     else if(keyCode == VK_UP)
@@ -751,8 +758,11 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
             memory.TransientStorage = ((uint8*)memory.PermanentStorage + memory.PermanentStorageSize);
             memory.TransientStorageStart = memory.TransientStorage;
             
+            RECT oldCursorClip, newCursorClip;
+            GetClipCursor(&oldCursorClip);
+            
             if(memory.PermanentStorage && memory.TransientStorage && samples)
-            {            
+            {
                 MP_INPUT input[2] = {};
                 MP_INPUT* newInput = &input[0];
                 MP_INPUT* oldInput = &input[1];
@@ -803,6 +813,20 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     Win32ProcessPendingMessages(&win32State, newKeyboardController, mouseInput, &GlobalWindowInfo);
                     
+                    if(mouseInput->ShowCursor)
+                    {
+                        GetWindowRect(window, &newCursorClip);
+                        newCursorClip.right -= 10;
+                        newCursorClip.left += 10;
+                        newCursorClip.top += 10;
+                        newCursorClip.bottom -= 10;
+                        ClipCursor(&newCursorClip);
+                    }
+                    else
+                    {
+                        ClipCursor(&oldCursorClip);
+                    }
+                                        
                     if(GlobalPause)
                         continue;
                     
@@ -995,16 +1019,13 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     {
                         soundIsValid = false;
                     }
-                    // TODO: Add Vsync toggle and a Vsync wait here with Vulkan
                     
                     LARGE_INTEGER endCounter = Win32GetClockValue();
                     deltaTime = Win32GetSecondsElapsed(lastCounter, endCounter);
                     lastCounter = endCounter;
                     
-                    Win32WindowDimensions dimensions = Win32GetWindowDimensions(window);
-                    
                     flipClock = Win32GetClockValue();
-                                        
+                    
                     // TODO: Swap macro
                     MP_INPUT* temp = newInput;
                     newInput = oldInput;
@@ -1025,7 +1046,7 @@ INT __stdcall WinMain(HINSTANCE instance, HINSTANCE prevInstance, PSTR commandLi
                     
                     PrintProfilerResults();
                 }
-                
+                ClipCursor(&oldCursorClip);
                 VulkanCleanup(vkData, renderData);
                 DEBUGPlatformFreeFileMemory(&thread, vertShader.data);
                 DEBUGPlatformFreeFileMemory(&thread, fragShader.data);

@@ -123,7 +123,7 @@ struct MP_MOUSE_BUTTON_STATE
 
 struct MP_MOUSE_INPUT
 {
-    int32 X, Y, Wheel;
+    int32 oldCursorPosX, oldCursorPosY, deltaX, deltaY, Wheel;
     bool32 ShowCursor;
     
     union

@@ -11,11 +11,6 @@ struct Win32WindowInfo
     bool32 WindowResized;
 };
 
-struct Win32WindowDimensions
-{
-    int width, height;
-};
-
 struct Win32SoundOutput{
     int SamplesPerSecond;
     int BytesPerSample;
