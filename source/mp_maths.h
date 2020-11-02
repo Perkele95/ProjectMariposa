@@ -1,6 +1,7 @@
 #pragma once
 
 #include <math.h>
+#include <xmmintrin.h>
 
 // ---------------------
 // Vectors
@@ -141,12 +142,38 @@ mat4x4 operator*(mat4x4 a, mat4x4 b)
 {
     mat4x4 result = {};
     
-    for(uint16 k = 0; k < 4; k++)
+    float dataB0[4] = {b.data[0][0], b.data[1][0], b.data[2][0], b.data[3][0]};
+    float dataB1[4] = {b.data[0][1], b.data[1][1], b.data[2][1], b.data[3][1]};
+    float dataB2[4] = {b.data[0][2], b.data[1][2], b.data[2][2], b.data[3][2]};
+    float dataB3[4] = {b.data[0][3], b.data[1][3], b.data[2][3], b.data[3][3]};
+    __m128 wideDataB0 = _mm_load_ps(dataB0);
+    __m128 wideDataB1 = _mm_load_ps(dataB1);
+    __m128 wideDataB2 = _mm_load_ps(dataB2);
+    __m128 wideDataB3 = _mm_load_ps(dataB3);
+    
+    for(uint32 i = 0; i < 4; i++)
     {
-        for(uint16 i = 0; i < 4; i++)
-        {
-            result.data[k][i] = a.data[k][0] * b.data[0][i] + a.data[k][1] * b.data[1][i] + a.data[k][2] * b.data[2][i] + a.data[k][3] * b.data[3][i];
-        }
+        float dataA[4] = {a.data[i][0], a.data[i][1], a.data[i][2], a.data[i][3]};
+        __m128 wideDataA = _mm_load_ps(dataA);
+        
+        __m128 data0 = _mm_mul_ps(wideDataA, wideDataB0);
+        __m128 data1 = _mm_mul_ps(wideDataA, wideDataB1);
+        __m128 data2 = _mm_mul_ps(wideDataA, wideDataB2);
+        __m128 data3 = _mm_mul_ps(wideDataA, wideDataB3);
+        
+        float addArrayA[4];
+        float addArrayB[4];
+        float addArrayC[4];
+        float addArrayD[4];
+        _mm_store_ps(addArrayA, data0);
+        _mm_store_ps(addArrayB, data1);
+        _mm_store_ps(addArrayC, data2);
+        _mm_store_ps(addArrayD, data3);
+        
+        result.data[i][0] = addArrayA[0] + addArrayA[1] + addArrayA[2] + addArrayA[3];
+        result.data[i][1] = addArrayB[0] + addArrayB[1] + addArrayB[2] + addArrayB[3];
+        result.data[i][2] = addArrayC[0] + addArrayC[1] + addArrayC[2] + addArrayC[3];
+        result.data[i][3] = addArrayD[0] + addArrayD[1] + addArrayD[2] + addArrayD[3];
     }
     
     return result;
